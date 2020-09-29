@@ -4,7 +4,7 @@ import argparse
 import os
 import subprocess
 
-parser = argparse.ArgumentParser(description="Install Lambda's ZK and dependencies.")
+parser = argparse.ArgumentParser(description="Install FK and dependencies.")
 args = parser.parse_args()
 
 def execute(cmd):
@@ -17,7 +17,7 @@ def execute(cmd):
         )
     return ret.stdout.decode("utf-8")
 
-env_dir="zk-virtualenv"
+env_dir="python-venv"
 
 print("Creating Python virtualenv at {}".format(env_dir))
 execute("python3 -mvenv {}".format(env_dir))
@@ -27,4 +27,10 @@ execute(". {}/bin/activate && pip3 install -r requirements.txt".format(env_dir))
 
 print("Configure mypy extensions")
 execute(". {}/bin/activate && mypy_boto3".format(env_dir))
+
+env_dir="node-venv"
+print("Creating Node virtualenv at {}".format(env_dir))
+execute("nodeenv {}".format(env_dir))
+print("Install Node dependencies with npm")
+execute(". {}/bin/activate && npm install install".format(env_dir))
 
