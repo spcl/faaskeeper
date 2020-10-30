@@ -1,0 +1,20 @@
+{
+  "aws": {
+    "name": "aws",
+    "region": "us-east-1",
+    "runtime": "python3.8",
+    "plugins": []
+  },
+  "azure": {
+    "region": "eastus",
+    "runtime": "python3.8",
+    "plugins": [ "serverless-azure-functions" ]
+  },
+  "gcp": {
+    "region": "eastus",
+    "runtime": "python3.8",
+    "plugins": [
+      "serverless-google-cloudfunctions"
+    ]
+  }
+}

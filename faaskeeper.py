@@ -10,19 +10,19 @@ def cli():
 @cli.group()
 @click.option('--provider', type=click.Choice(['aws', 'azure', 'gcp']), required=True)
 @click.pass_context
-def service(ctx, provider):
+def deploy(ctx, provider):
 
     ctx.ensure_object(dict)
     ctx.obj['provider'] = provider
 
-@service.command()
+@deploy.command()
 @click.pass_context
-def deploy(ctx):
+def functions(ctx):
     logging.info('Deploy to ' + ctx.obj['provider'])
 
-@service.command()
+@deploy.command()
 @click.pass_context
-def kill(ctx):
+def (ctx):
     logging.info('Kill service at ' + ctx.obj['provider'])
 
 @cli.group()

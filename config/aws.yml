@@ -1,0 +1,29 @@
+
+service: faaskeeper
+
+provider:
+  name: aws
+  runtime: python3.8
+  stage: dev
+  region: us-east-1
+
+package:
+  include:
+    - faaskeeper/aws/**
+    - faaskeeper/core/**
+    - faaskeeper/__init__.py
+  exclude:
+    - faaskeeper/**
+    - config/**
+    - node_modules/**
+    - venv/**
+    - zk-virtualenv/**
+
+functions:
+  hello:
+    handler: faaskeeper/aws/handler.hello
+    events:
+      - http:
+          path: fk
+          method: POST
+

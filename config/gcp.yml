@@ -24,13 +24,13 @@ package:
     - node-venv/**
     - python-venv/**
   include:
-    - faaskeeper/gcp/**
-    - faaskeeper/core/**
-    - faaskeeper/__init__.py
+    - server/faaskeeper/gcp/**
+    - server/faaskeeper/core/**
+    - server/faaskeeper/__init__.py
     - main.py
 
 functions:
-  first:
+  server:
     handler: http
     events:
       - http: path

@@ -1,0 +1,35 @@
+
+service: faaskeeper
+
+provider:
+  name: azure
+  region: West Europe
+  runtime: python3.8 # python3.7 or python3.8 also available
+  os: linux  # linux is the only operating system available for python
+  stage: dev
+
+plugins:
+  - serverless-azure-functions
+
+# you can add packaging information here
+package:
+  include:
+    - faaskeeper/azure/**
+    - faaskeeper/core/**
+    - faaskeeper/__init__.py
+  exclude:
+    - faaskeeper/**
+    - config/**
+    - node_modules/**
+    - venv/**
+    - zk-virtualenv/**
+
+functions:
+  hello:
+    handler: faaskeeper/azure/src/handlers/hello.main
+    events:
+      - http: true
+        methods:
+          - POST
+        authLevel: anonymous
+
