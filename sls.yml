@@ -1,0 +1,10 @@
+service: faaskeeper
+
+provider:
+  name: ${file(./config/providers.json):${opt:provider}.name}
+  #name: aws
+  region: ${file(./config/providers.json):${opt:provider}.region}
+  runtime: python3.8
+
+plugins: ${file(./config/providers.json):${opt:provider}.plugins}
+
