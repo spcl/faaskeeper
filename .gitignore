@@ -128,4 +128,10 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-zk-virtualenv/
+.serverless
+python-venv/
+node-venv/
+credentials.sh
+node_modules
+
+
