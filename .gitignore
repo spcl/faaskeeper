@@ -130,8 +130,7 @@ dmypy.json
 
 .serverless
 python-venv/
-node-venv/
 credentials.sh
-node_modules
+package-lock.json
 
 
