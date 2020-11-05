@@ -1,3 +1,4 @@
+import json
 import os
 import socket
 from typing import Dict, Callable
@@ -48,11 +49,11 @@ def create_node(write_event: dict, table_name: str, verbose_output: bool) -> dic
             },
             ExpressionAttributeNames={"#P": "path"},
             ConditionExpression="attribute_not_exists(#P)",
-            ReturnConsumedCapacity='TOTAL'
+            ReturnConsumedCapacity="TOTAL",
         )
         print(ret)
         return {"status": "success", "path": path, "version": 0}
-    except dynamodb.exceptions.ConditionalCheckFailedException as e:
+    except dynamodb.exceptions.ConditionalCheckFailedException:
         return {"status": "failure", "reason": f"Node {path} exists!"}
     except Exception as e:
         # Report failure to the user
@@ -82,6 +83,19 @@ ops: Dict[str, Callable[[dict, bool], dict]] = {
 
 def get_object(obj: dict):
     return next(iter(obj.values()))
+
+
+def notify(write_event: dict, ret: dict):
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.settimeout(2)
+            source_ip = get_object(write_event["sourceIP"])
+            source_port = int(get_object(write_event["sourcePort"]))
+            s.connect((source_ip, source_port))
+            s.sendall(json.dumps(ret).encode())
+        except socket.timeout:
+            print(f"Notification of client {source_ip}:{source_port} failed!")
 
 
 def handler(event: dict, context: dict):
@@ -120,6 +134,7 @@ def handler(event: dict, context: dict):
                 continue
 
             ret = ops[op](write_event, table_name, verbose_output)
+            notify(write_event, ret)
             print(ret)
             processed_events += 1
 
