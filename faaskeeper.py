@@ -22,6 +22,7 @@ def execute(cmd, shell=False, cwd=None, env=None):
 
 def common_params(func):
     @click.option('--provider', type=click.Choice(['aws', 'azure', 'gcp']), required=True)
+    @click.option('--verbose', type=bool, default=False)
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
@@ -32,11 +33,16 @@ def common_params(func):
 def cli():
     logging.basicConfig(level=logging.INFO)
 
-@cli.command()
+@cli.group(invoke_without_command=True)
+@click.pass_context
+def deploy(ctx):
+    if ctx.invoked_subcommand is None:
+        service.main()
+
+@deploy.command()
 @common_params
 @click.option('--clean', type=bool, default=False)
-@click.option('--verbose', type=bool, default=False)
-def deploy(provider: str, clean: bool, verbose: bool):
+def service(provider: str, verbose: bool, clean: bool):
     env = {
         **os.environ,
         'FK_VERBOSE': str(verbose)
@@ -47,6 +53,16 @@ def deploy(provider: str, clean: bool, verbose: bool):
 
     logging.info(f"Deploy service to provider: {provider}")
     execute(f"sls deploy -c config/{provider}.yml", env=env)
+
+@deploy.command()
+@common_params
+def functions(provider: str, verbose: bool):
+    env = {
+        **os.environ,
+        'FK_VERBOSE': str(verbose)
+    }
+    logging.info(f"Deploy functions to provider: {provider}")
+    execute(f"sls deploy --function writer -c config/{provider}.yml", env=env)
 
 if __name__ == '__main__':
     cli()
