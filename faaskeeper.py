@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 
-import click
 import functools
 import logging
+import os
 import subprocess
 
+import click
+
 # Executing with shell provides options such as wildcard expansion
-def execute(cmd, shell=False, cwd=None):
+def execute(cmd, shell=False, cwd=None, env=None):
     if not shell:
         cmd = cmd.split()
     ret = subprocess.run(
-        cmd, shell=shell, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+        cmd, shell=shell, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
     if ret.returncode:
         raise RuntimeError(
@@ -33,13 +35,18 @@ def cli():
 @cli.command()
 @common_params
 @click.option('--clean', type=bool, default=False)
-def deploy(provider: str, clean: bool):
+@click.option('--verbose', type=bool, default=False)
+def deploy(provider: str, clean: bool, verbose: bool):
+    env = {
+        **os.environ,
+        'FK_VERBOSE': str(verbose)
+    }
     if clean:
         logging.info(f"Remove existing service at provider: {provider}")
-        execute(f"sls remove -c config/{provider}.yml")
+        execute(f"sls remove -c config/{provider}.yml", env=env)
 
     logging.info(f"Deploy service to provider: {provider}")
-    execute(f"sls deploy -c config/{provider}.yml")
+    execute(f"sls deploy -c config/{provider}.yml", env=env)
 
 if __name__ == '__main__':
     cli()
