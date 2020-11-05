@@ -25,10 +25,18 @@ functions:
       - http:
           path: fk
           method: POST
+      - stream:
+          type: dynamodb
+          batchSize: 1
+          startingPosition: LATEST
+          arn:
+            Fn::GetAtt:
+              - writerTable
+              - StreamArn
 
 resources:
   Resources:
-    usersTable:
+    writerTable:
       Type: AWS::DynamoDB::Table
       Properties:
         TableName: ${self:provider.environment.DYNAMODB_TABLE}-write-queue
@@ -43,4 +51,6 @@ resources:
             KeyType: HASH
           - AttributeName: timestamp
             KeyType: RANGE
+        StreamSpecification:
+          StreamViewType: NEW_IMAGE
 
