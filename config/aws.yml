@@ -38,6 +38,17 @@ functions:
 
 resources:
   Resources:
+    dataTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}-data
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: path
+            AttributeType: S
+        KeySchema:
+          - AttributeName: path
+            KeyType: HASH
     writerTable:
       Type: AWS::DynamoDB::Table
       Properties:
