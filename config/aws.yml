@@ -1,4 +1,3 @@
-
 service: faaskeeper
 
 provider:
@@ -21,6 +20,8 @@ package:
 functions:
   writer:
     handler: faaskeeper/aws/writer.handler
+    environment:
+      VERBOSE_LOGGING: ${env:FK_VERBOSE}
     events:
       - http:
           path: fk
@@ -29,6 +30,7 @@ functions:
           type: dynamodb
           batchSize: 1
           startingPosition: LATEST
+          maximumRetryAttempts: 3
           arn:
             Fn::GetAtt:
               - writerTable
