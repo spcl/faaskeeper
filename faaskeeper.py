@@ -1,44 +1,45 @@
 #!/usr/bin/env python3
 
-import logging
 import click
+import functools
+import logging
+import subprocess
+
+# Executing with shell provides options such as wildcard expansion
+def execute(cmd, shell=False, cwd=None):
+    if not shell:
+        cmd = cmd.split()
+    ret = subprocess.run(
+        cmd, shell=shell, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+    )
+    if ret.returncode:
+        raise RuntimeError(
+            "Running {} failed!\n Output: {}".format(cmd, ret.stdout.decode("utf-8"))
+        )
+    return ret.stdout.decode("utf-8")
+
+def common_params(func):
+    @click.option('--provider', type=click.Choice(['aws', 'azure', 'gcp']), required=True)
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    return wrapper
 
 @click.group()
 def cli():
     logging.basicConfig(level=logging.INFO)
 
-@cli.group()
-@click.option('--provider', type=click.Choice(['aws', 'azure', 'gcp']), required=True)
-@click.pass_context
-def deploy(ctx, provider):
+@cli.command()
+@common_params
+@click.option('--clean', type=bool, default=False)
+def deploy(provider: str, clean: bool):
+    if clean:
+        logging.info(f"Remove existing service at provider: {provider}")
+        execute(f"sls remove -c config/{provider}.yml")
 
-    ctx.ensure_object(dict)
-    ctx.obj['provider'] = provider
-
-@deploy.command()
-@click.pass_context
-def functions(ctx):
-    logging.info('Deploy to ' + ctx.obj['provider'])
-
-@deploy.command()
-@click.pass_context
-def (ctx):
-    logging.info('Kill service at ' + ctx.obj['provider'])
-
-@cli.group()
-@click.option('--provider', type=click.Choice(['aws', 'azure', 'gcp']), required=True)
-@click.option('--example', type=str, required=True)
-@click.pass_context
-def examples(ctx, provider, example):
-
-    ctx.ensure_object(dict)
-    ctx.obj['provider'] = provider
-    ctx.obj['example'] = example
-
-@examples.command()
-@click.pass_context
-def invoke(ctx):
-    logging.info('Deploy to ' + ctx.obj['provider'])
+    logging.info(f"Deploy service to provider: {provider}")
+    execute(f"sls deploy -c config/{provider}.yml")
 
 if __name__ == '__main__':
     cli()
