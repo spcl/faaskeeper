@@ -42,7 +42,7 @@ def create_node(write_event: dict, table_name: str, verbose_output: bool) -> dic
         ret = dynamodb.put_item(
             TableName=f"{table_name}-data",
             Item={
-                "_path": {"S": path},
+                "path": {"S": path},
                 "version": {"N": "0"},
                 "data": {"B": get_object(write_event["data"])},
             },
@@ -52,7 +52,7 @@ def create_node(write_event: dict, table_name: str, verbose_output: bool) -> dic
         )
         print(ret)
         return {"status": "success", "path": path, "version": 0}
-    except client.exceptions.ConditionalCheckFailedException as e:
+    except dynamodb.exceptions.ConditionalCheckFailedException as e:
         return {"status": "failure", "reason": f"Node {path} exists!"}
     except Exception as e:
         # Report failure to the user
