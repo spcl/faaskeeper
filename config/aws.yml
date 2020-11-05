@@ -6,24 +6,41 @@ provider:
   runtime: python3.8
   stage: dev
   region: us-east-1
+  environment:
+    DYNAMODB_TABLE: ${self:service}-${opt:stage, self:provider.stage}
 
 package:
   include:
     - faaskeeper/aws/**
     - faaskeeper/core/**
-    - faaskeeper/__init__.py
   exclude:
     - faaskeeper/**
     - config/**
-    - node_modules/**
-    - venv/**
-    - zk-virtualenv/**
+    - python-venv/**
 
 functions:
-  hello:
-    handler: faaskeeper/aws/handler.hello
+  writer:
+    handler: faaskeeper/aws/writer.handler
     events:
       - http:
           path: fk
           method: POST
+
+resources:
+  Resources:
+    usersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}-write-queue
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: key
+            AttributeType: S
+          - AttributeName: timestamp
+            AttributeType: S
+        KeySchema:
+          - AttributeName: key
+            KeyType: HASH
+          - AttributeName: timestamp
+            KeyType: RANGE
 
