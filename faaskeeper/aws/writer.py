@@ -93,7 +93,11 @@ def notify(write_event: dict, ret: dict):
             source_ip = get_object(write_event["sourceIP"])
             source_port = int(get_object(write_event["sourcePort"]))
             s.connect((source_ip, source_port))
-            s.sendall(json.dumps(ret).encode())
+            s.sendall(
+                json.dumps(
+                    {**ret, "event": get_object(write_event["timestamp"])}
+                ).encode()
+            )
         except socket.timeout:
             print(f"Notification of client {source_ip}:{source_port} failed!")
 
