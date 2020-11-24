@@ -54,7 +54,7 @@ def create_node(write_event: dict, table_name: str, verbose_output: bool) -> dic
         print(ret)
         return {"status": "success", "path": path, "version": 0}
     except dynamodb.exceptions.ConditionalCheckFailedException:
-        return {"status": "failure", "reason": f"Node {path} exists!"}
+        return {"status": "failure", "path": path, "reason": "node_exists"}
     except Exception as e:
         # Report failure to the user
         print("Failure!")
