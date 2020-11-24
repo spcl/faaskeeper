@@ -2,6 +2,7 @@
 
 import os
 import sys
+import traceback
 from inspect import signature
 from typing import List
 
@@ -15,6 +16,7 @@ from prompt_toolkit.completion import WordCompleter
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, 'client'))
 
 from faaskeeper.client import FaaSKeeperClient
+from faaskeeper.exceptions import FaaSKeeperException
 
 keywords = [
     "help",
@@ -61,8 +63,12 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
         else:
             converted_arguments.append(args[idx])
     print(converted_arguments)
-    function(converted_arguments)
-
+    try:
+        function(converted_arguments)
+    except FaaSKeeperException as e:
+        click.echo("Execution of the command failed.")
+        click.echo(e)
+        traceback.print_exc()
 
 @click.command()
 @click.argument("provider", type=click.Choice(["aws", "gcp", "azure"]))
@@ -75,21 +81,22 @@ def cli(provider: str, service_name: str, port: int):
         auto_suggest=AutoSuggestFromHistory()
     )
 
+    status = "DISCONNECTED"
     try:
         client = FaaSKeeperClient(provider, service_name, port)
-        #client.start()
+        client.start()
+        status = "CONNECTED"
     #FIXME: FK exceptions
     except Exception as e:
         click.echo("Unable to connect")
         click.echo(e)
 
-    status = "CONNECTED"
     session_id = client.session_id
     counter = 0
 
     while True:
         try:
-            text = session.prompt(f"[fk: {provider}:{service_name}(status) session:{session_id} {counter}] ")
+            text = session.prompt(f"[fk: {provider}:{service_name}({status}) session:{session_id} {counter}] ")
         except KeyboardInterrupt:
             continue
         except EOFError:
