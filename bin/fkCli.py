@@ -2,6 +2,8 @@
 
 import os
 import sys
+from inspect import signature
+from typing import List
 
 import click
 
@@ -16,21 +18,51 @@ from faaskeeper.client import FaaSKeeperClient
 
 keywords = [
     "help",
+    "logs",
+    "quit",
     "connect",
     "close",
-    "logs",
     "create",
     "get",
     "delete",
     "ls",
     "set",
     "stat",
-    "close",
     "getEphemerals",
-    "quit"
 ]
 
 fkCompleter = WordCompleter(keywords, ignore_case = True)
+
+def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
+
+    # process commands not offered by the API
+    if cmd in ['ls', 'logs']:
+        return
+
+    # create mapping
+    function = getattr(client, cmd)
+    sig = signature(function)
+    params_count = len(sig.parameters)
+    # incorrect number of parameters
+    if params_count != len(args):
+        msg = cmd
+        for param in sig.parameters.values():
+            msg += f" {param.name}:{param.annotation.__name__}"
+        click.echo(msg)
+        return
+
+    # convert arguments
+    converted_arguments = []
+    for idx, param in enumerate(sig.parameters.values()):
+        if bytes == param.annotation:
+            converted_arguments.append(args[idx].encode())
+        elif bool == param.annotation:
+            converted_arguments.append(bool(args[idx]))
+        else:
+            converted_arguments.append(args[idx])
+    print(converted_arguments)
+    function(converted_arguments)
+
 
 @click.command()
 @click.argument("provider", type=click.Choice(["aws", "gcp", "azure"]))
@@ -43,29 +75,43 @@ def cli(provider: str, service_name: str, port: int):
         auto_suggest=AutoSuggestFromHistory()
     )
 
-    counter = 0
-    client = FaaSKeeperClient(provider, service_name, port)
-    client.start()
+    try:
+        client = FaaSKeeperClient(provider, service_name, port)
+        #client.start()
+    #FIXME: FK exceptions
+    except Exception as e:
+        click.echo("Unable to connect")
+        click.echo(e)
+
     status = "CONNECTED"
+    session_id = client.session_id
+    counter = 0
 
     while True:
         try:
-            text = session.prompt(f"[fk: {provider}:{service_name}(status) {counter}] ")
+            text = session.prompt(f"[fk: {provider}:{service_name}(status) session:{session_id} {counter}] ")
         except KeyboardInterrupt:
             continue
         except EOFError:
             break
 
-        if text == 'quit':
+        cmds = text.split()
+        if len(cmds) == 0:
+           continue 
+
+        cmd = cmds[0]
+        if cmd == 'quit':
             break
-        elif text == 'help':
+        elif cmd == 'help':
             click.echo("Available commands")
             click.echo(keywords)
-        elif text == 'logs':
+        elif cmd == 'logs':
             # FIXME: query logs
             pass
-        elif text not in keywords:
+        elif cmd not in keywords:
             click.echo(f"Unknown command {text}")
+        else:
+            process_cmd(client, cmd, cmds[1:])
         counter += 1
 
     print("Closing...")
