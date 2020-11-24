@@ -133,4 +133,5 @@ python-venv/
 credentials.sh
 package-lock.json
 
-
+*.swp
+*.swo
