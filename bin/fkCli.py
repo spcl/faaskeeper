@@ -16,7 +16,7 @@ from prompt_toolkit.completion import WordCompleter
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, 'client'))
 
 from faaskeeper.client import FaaSKeeperClient
-from faaskeeper.exceptions import FaaSKeeperException, TimeOutException, NodeExistsException
+from faaskeeper.exceptions import FaaSKeeperException, TimeoutException, NodeExistsException
 
 keywords = [
     "help",
@@ -35,7 +35,9 @@ keywords = [
 clientAPIMapping = {
     "create": "create",
     "get": "get_data",
-    "set": "set_data"
+    "set": "set_data",
+    "close": "stop",
+    "connect": "start"
 }
 
 fkCompleter = WordCompleter(keywords, ignore_case = True)
@@ -72,14 +74,17 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
         click.echo(ret)
     except NodeExistsException as e:
         click.echo(e)
-    except TimeOutException as e:
+    except TimeoutException as e:
         click.echo(e)
         click.echo("Closing down session.")
         client.stop()
+        return "DISCONNECTED", None
     except FaaSKeeperException as e:
         click.echo("Execution of the command failed.")
         click.echo(e)
         traceback.print_exc()
+
+    return "CONNECTED", client.session_id
 
 @click.command()
 @click.argument("provider", type=click.Choice(["aws", "gcp", "azure"]))
@@ -129,7 +134,7 @@ def cli(provider: str, service_name: str, port: int):
         elif cmd not in keywords:
             click.echo(f"Unknown command {text}")
         else:
-            process_cmd(client, cmd, cmds[1:])
+            status, session_id = process_cmd(client, cmd, cmds[1:])
         counter += 1
 
     print("Closing...")
