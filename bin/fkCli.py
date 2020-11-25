@@ -16,7 +16,7 @@ from prompt_toolkit.completion import WordCompleter
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, 'client'))
 
 from faaskeeper.client import FaaSKeeperClient
-from faaskeeper.exceptions import FaaSKeeperException, TimeoutException, NodeExistsException
+from faaskeeper.exceptions import FaaSKeeperException, TimeoutException, NodeExistsException, BadVersionError
 
 keywords = [
     "help",
@@ -74,7 +74,7 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
     try:
         ret = function(*converted_arguments)
         click.echo(ret)
-    except NodeExistsException as e:
+    except (NodeExistsException, BadVersionError) as e:
         click.echo(e)
     except TimeoutException as e:
         click.echo(e)
