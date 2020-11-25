@@ -5,6 +5,8 @@ import logging
 import os
 import subprocess
 
+from faaskeeper.aws.init import init as aws_init
+
 import click
 
 # Executing with shell provides options such as wildcard expansion
@@ -53,6 +55,10 @@ def service(provider: str, verbose: bool, clean: bool):
 
     logging.info(f"Deploy service to provider: {provider}")
     execute(f"sls deploy -c config/{provider}.yml", env=env)
+
+    #FIXME: other providers
+    #FIXME: name and stage
+    aws_init("faaskeeper-dev")
 
 @deploy.command()
 @common_params

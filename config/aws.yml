@@ -49,6 +49,17 @@ functions:
 
 resources:
   Resources:
+    stateTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}-state
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: type
+            AttributeType: S
+        KeySchema:
+          - AttributeName: type
+            KeyType: HASH
     dataTable:
       Type: AWS::DynamoDB::Table
       Properties:
