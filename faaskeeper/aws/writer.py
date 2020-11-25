@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import socket
@@ -10,18 +11,17 @@ mandatory_event_fields = [
     "path",
     "user",
     "version",
-    "flags",
     "sourceIP",
     "sourcePort",
     "data",
 ]
 dynamodb = boto3.client("dynamodb")
 
-def verify_event(id: str, write_event:dict, verbose_output: bool) -> bool:
+def verify_event(id: str, write_event:dict, verbose_output: bool, flags = []) -> bool:
     """
         Handle malformed events correctly.
     """
-    if any(k not in write_event.keys() for k in mandatory_event_fields):
+    if any(k not in write_event.keys() for k in [*mandatory_event_fields, *flags]):
         if verbose_output:
             print(
                 "Incorrect event with ID {id}, timestamp {timestamp}".format(
@@ -43,7 +43,7 @@ def verify_event(id: str, write_event:dict, verbose_output: bool) -> bool:
 
 def create_node(id: str, write_event: dict, table_name: str, verbose_output: bool) -> Optional[dict]:
 
-    if not verify_event(id, write_event, verbose_output):
+    if not verify_event(id, write_event, verbose_output, ["flags"]):
         return None
 
     try:
@@ -61,12 +61,13 @@ def create_node(id: str, write_event: dict, table_name: str, verbose_output: boo
             Item={
                 "path": {"S": path},
                 "version": {"N": "0"},
-                "data": {"B": get_object(write_event["data"])},
+                "data": {"B": base64.b64decode(get_object(write_event["data"]))},
             },
             ExpressionAttributeNames={"#P": "path"},
             ConditionExpression="attribute_not_exists(#P)",
             ReturnConsumedCapacity="TOTAL",
         )
+        print(get_object(write_event["data"]))
         print(ret)
         return {"status": "success", "path": path, "version": 0}
     except dynamodb.exceptions.ConditionalCheckFailedException:
@@ -100,12 +101,40 @@ def deregister_session(id: str, write_event: dict, table_name: str, verbose_outp
         print(e)
         return {"status": "failure", "reason": "unknown"}
 
-def set_data():
-    """
-        The algorithm works as follows:
-        1) Read node data
-    """
-    pass
+def set_data(id: str, write_event: dict, table_name: str, verbose_output: bool):
+
+    print(write_event)
+    if not verify_event(id, write_event, verbose_output):
+        return None
+    # FIXME: version
+    try:
+        path = get_object(write_event["path"])
+        if verbose_output:
+            print(f"Attempting to write data at {path}")
+        """
+            Path is a reserved keyword in AWS DynamoDB - we must rename.
+        """
+        print(get_object(write_event["data"]))
+        ret = dynamodb.put_item(
+            TableName=f"{table_name}-data",
+            Item={
+                "path": {"S": path},
+                "version": {"N": "0"},
+                "data": {"B": base64.b64decode(get_object(write_event["data"]))},
+            },
+            ExpressionAttributeNames={"#P": "path"},
+            ConditionExpression="attribute_exists(#P)",
+            ReturnConsumedCapacity="TOTAL",
+        )
+        print(ret)
+        return {"status": "success", "path": path, "version": 0}
+    except dynamodb.exceptions.ConditionalCheckFailedException:
+        return {"status": "failure", "path": path, "reason": "node_does_not_exist"}
+    except Exception as e:
+        # Report failure to the user
+        print("Failure!")
+        print(e)
+        return {"status": "failure", "reason": "unknown"}
 
 
 def delete_node():
