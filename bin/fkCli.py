@@ -32,6 +32,11 @@ keywords = [
     "stat",
     "getEphemerals",
 ]
+clientAPIMapping = {
+    "create": "create",
+    "get": "get_data",
+    "set": "set_data"
+}
 
 fkCompleter = WordCompleter(keywords, ignore_case = True)
 
@@ -42,12 +47,12 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
         return
 
     # create mapping
-    function = getattr(client, cmd)
+    function = getattr(client, clientAPIMapping[cmd])
     sig = signature(function)
     params_count = len(sig.parameters)
     # incorrect number of parameters
     if params_count != len(args):
-        msg = cmd
+        msg = f"{cmd} arguments:"
         for param in sig.parameters.values():
             msg += f" {param.name}:{param.annotation.__name__}"
         click.echo(msg)
@@ -87,17 +92,18 @@ def cli(provider: str, service_name: str, port: int):
     )
 
     status = "DISCONNECTED"
+    counter = 0
+    session_id = None
     try:
         client = FaaSKeeperClient(provider, service_name, port)
         client.start()
         status = "CONNECTED"
+        session_id = client.session_id
     #FIXME: FK exceptions
     except Exception as e:
         click.echo("Unable to connect")
         click.echo(e)
 
-    session_id = client.session_id
-    counter = 0
 
     while True:
         try:
@@ -118,8 +124,7 @@ def cli(provider: str, service_name: str, port: int):
             click.echo("Available commands")
             click.echo(keywords)
         elif cmd == 'logs':
-            # FIXME: query logs
-            pass
+            click.echo(client.logs())
         elif cmd not in keywords:
             click.echo(f"Unknown command {text}")
         else:
