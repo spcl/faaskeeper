@@ -64,7 +64,7 @@ def create_node(id: str, write_event: dict, table_name: str, verbose_output: boo
                 "data": {"B": base64.b64decode(get_object(write_event["data"]))},
             },
             ExpressionAttributeNames={"#P": "path"},
-            ConditionExpression="(attribute_not_exists(#P)) and (version == :version)",
+            ConditionExpression="attribute_not_exists(#P)",
             ReturnConsumedCapacity="TOTAL",
         )
         print(get_object(write_event["data"]))
