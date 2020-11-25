@@ -15,9 +15,12 @@ provider:
         - dynamodb:UpdateItem
         - dynamodb:DeleteItem
       Resource:
-        Fn::GetAtt:
-          - dataTable
-          - Arn
+        - Fn::GetAtt:
+            - dataTable
+            - Arn
+        - Fn::GetAtt:
+            - stateTable
+            - Arn
 
 package:
   include:
