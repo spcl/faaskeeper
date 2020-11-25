@@ -124,7 +124,7 @@ def cli(provider: str, service_name: str, port: int):
             click.echo("Available commands")
             click.echo(keywords)
         elif cmd == 'logs':
-            click.echo(client.logs())
+            click.echo_via_pager(client.logs())
         elif cmd not in keywords:
             click.echo(f"Unknown command {text}")
         else:
