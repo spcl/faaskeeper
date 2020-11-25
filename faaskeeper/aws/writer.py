@@ -1,7 +1,7 @@
 import json
 import os
 import socket
-from typing import Dict, Callable
+from typing import Dict, Callable, Optional
 
 import boto3
 
@@ -17,6 +17,20 @@ mandatory_event_fields = [
 ]
 dynamodb = boto3.client("dynamodb")
 
+def verify_event(id: str, write_event:dict, verbose_output: bool) -> bool:
+    """
+        Handle malformed events correctly.
+    """
+    if any(k not in write_event.keys() for k in mandatory_event_fields):
+        if verbose_output:
+            print(
+                "Incorrect event with ID {id}, timestamp {timestamp}".format(
+                    id=id, timestamp=write_event["timestamp"]
+                )
+            )
+        return False
+    return True
+
 """
     The function has the following responsibilities:
     1) Create new node, returning success or failure if the node exists
@@ -27,8 +41,10 @@ dynamodb = boto3.client("dynamodb")
     6) Look-up watches in a seperate table.
 """
 
+def create_node(id: str, write_event: dict, table_name: str, verbose_output: bool) -> Optional[dict]:
 
-def create_node(write_event: dict, table_name: str, verbose_output: bool) -> dict:
+    if not verify_event(id, write_event, verbose_output):
+        return None
 
     try:
         # TODO: ephemeral
@@ -61,6 +77,28 @@ def create_node(write_event: dict, table_name: str, verbose_output: bool) -> dic
         print(e)
         return {"status": "failure", "reason": "unknown"}
 
+def deregister_session(id: str, write_event: dict, table_name: str, verbose_output: bool) -> dict:
+
+    session_id = get_object(write_event["session_id"])
+    try:
+        # TODO: remove ephemeral nodes
+        ret = dynamodb.delete_item(
+            TableName=f"{table_name}-state",
+            Key={
+                "type": {"S": session_id}
+            },
+            ReturnConsumedCapacity="TOTAL",
+        )
+        return {"status": "success", "session_id": session_id}
+    except dynamodb.exceptions.ResourceNotFoundException:
+        if verbose_output:
+            print(f"Attempting to remove non-existing user {session_id}")
+        return {"status": "failure", "session_id": session_id, "reason": "session_does_not_exist"}
+    except Exception as e:
+        # Report failure to the user
+        print("Failure!")
+        print(e)
+        return {"status": "failure", "reason": "unknown"}
 
 def set_data():
     """
@@ -78,6 +116,7 @@ ops: Dict[str, Callable[[dict, bool], dict]] = {
     "create_node": create_node,
     "set_data": set_data,
     "delete_node": delete_node,
+    "deregister_session": deregister_session
 }
 
 
@@ -113,17 +152,6 @@ def handler(event: dict, context: dict):
         if record["eventName"] == "INSERT":
             write_event = record["dynamodb"]["NewImage"]
 
-            """
-                Handle malformed events correctly.
-            """
-            if any(k not in write_event.keys() for k in mandatory_event_fields):
-                if verbose_output:
-                    print(
-                        "Incorrect event with ID {id}, timestamp {timestamp}".format(
-                            id=record["eventID"], timestamp=write_event["timestamp"]
-                        )
-                    )
-                continue
             op = get_object(write_event["op"])
             if op not in ops:
                 if verbose_output:
@@ -137,7 +165,9 @@ def handler(event: dict, context: dict):
                     )
                 continue
 
-            ret = ops[op](write_event, table_name, verbose_output)
+            ret = ops[op](record["eventID"], write_event, table_name, verbose_output)
+            if not ret:
+                continue
             notify(write_event, ret)
             print(ret)
             processed_events += 1
