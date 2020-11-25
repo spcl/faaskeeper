@@ -74,7 +74,8 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
         click.echo(e)
     except TimeOutException as e:
         click.echo(e)
-        # FIXME: client - break session
+        click.echo("Closing down session.")
+        client.stop()
     except FaaSKeeperException as e:
         click.echo("Execution of the command failed.")
         click.echo(e)
