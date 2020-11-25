@@ -46,7 +46,9 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
 
     # process commands not offered by the API
     if cmd in ['ls', 'logs']:
-        return
+        if cmd == 'logs':
+            click.echo_via_pager(client.logs())
+        return "CONNECTED", client.session_id
 
     # create mapping
     function = getattr(client, clientAPIMapping[cmd])
@@ -58,7 +60,7 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
         for param in sig.parameters.values():
             msg += f" {param.name}:{param.annotation.__name__}"
         click.echo(msg)
-        return
+        return "CONNECTED", client.session_id
 
     # convert arguments
     converted_arguments = []
@@ -129,8 +131,6 @@ def cli(provider: str, service_name: str, port: int):
         elif cmd == 'help':
             click.echo("Available commands")
             click.echo(keywords)
-        elif cmd == 'logs':
-            click.echo_via_pager(client.logs())
         elif cmd not in keywords:
             click.echo(f"Unknown command {text}")
         else:
