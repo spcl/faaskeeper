@@ -64,7 +64,7 @@ def create_node(id: str, write_event: dict, table_name: str, verbose_output: boo
                 "data": {"B": base64.b64decode(get_object(write_event["data"]))},
             },
             ExpressionAttributeNames={"#P": "path"},
-            ConditionExpression="attribute_not_exists(#P)",
+            ConditionExpression="(attribute_not_exists(#P)) and (version == :version)",
             ReturnConsumedCapacity="TOTAL",
         )
         print(get_object(write_event["data"]))
@@ -109,27 +109,50 @@ def set_data(id: str, write_event: dict, table_name: str, verbose_output: bool):
     # FIXME: version
     try:
         path = get_object(write_event["path"])
+        version = get_object(write_event["version"])
+        print(version)
         if verbose_output:
             print(f"Attempting to write data at {path}")
         """
             Path is a reserved keyword in AWS DynamoDB - we must rename.
         """
         print(get_object(write_event["data"]))
-        ret = dynamodb.put_item(
+        ret = dynamodb.update_item(
             TableName=f"{table_name}-data",
-            Item={
+            Key={
                 "path": {"S": path},
-                "version": {"N": "0"},
-                "data": {"B": base64.b64decode(get_object(write_event["data"]))},
+                #"version": {"N": version},
             },
-            ExpressionAttributeNames={"#P": "path"},
-            ConditionExpression="attribute_exists(#P)",
+            #AttributeUpdates={
+            #    "data": {
+            #        "Value": {
+            #            "B": base64.b64decode(get_object(write_event["data"]))
+            #        }, #        "Action": { "PUT" }
+            #    }
+            #},
+            #ExpressionAttributeNames={"#P": "path"},
+            #ConditionExpression="(attribute_not_exists(#P)) and (version = :version)",
+            ConditionExpression="(attribute_exists(#P)) and (version = :version)",
+            UpdateExpression="SET #D = :data ADD version :inc",
+            ExpressionAttributeNames={"#D": "data", "#P": "path"},
+            ExpressionAttributeValues= {
+                ":version": {
+                    "N": get_object(write_event["version"])
+                },
+                ":inc": {
+                    "N": "1"
+                },
+                ":data": {
+                    "B": base64.b64decode(get_object(write_event["data"]))
+                }
+            },
             ReturnConsumedCapacity="TOTAL",
         )
         print(ret)
         return {"status": "success", "path": path, "version": 0}
-    except dynamodb.exceptions.ConditionalCheckFailedException:
-        return {"status": "failure", "path": path, "reason": "node_does_not_exist"}
+    except dynamodb.exceptions.ConditionalCheckFailedException as e:
+        print(e)
+        return {"status": "failure", "path": path, "reason": "update_failure"}
     except Exception as e:
         # Report failure to the user
         print("Failure!")
