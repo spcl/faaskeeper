@@ -4,11 +4,10 @@
   "description": "",
   "dependencies": {
     "install": "^0.13.0",
-    "serverless": "^2.3.0",
+    "serverless": "^2.10.0",
     "serverless-azure-functions": "^2.1.0",
     "serverless-google-cloudfunctions": "^3.1.1"
   },
-  "devDependencies": {},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mcopik/serverless-zookeeper.git"
