@@ -3,7 +3,10 @@
     "name": "aws",
     "region": "us-east-1",
     "runtime": "python3.8",
-    "plugins": []
+    "plugins": [
+      "serverless-dynamodb",
+      "serverless-offline"
+    ]
   },
   "azure": {
     "region": "eastus",

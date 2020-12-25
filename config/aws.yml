@@ -22,6 +22,10 @@ provider:
             - stateTable
             - Arn
 
+plugins:
+  - serverless-dynamodb-local
+  - serverless-offline
+
 package:
   include:
     - faaskeeper/aws/**
@@ -49,6 +53,12 @@ functions:
             Fn::GetAtt:
               - writerTable
               - StreamArn
+  heartbeat:
+    handler: faaskeeper/aws/heartbeat.handler
+    environment:
+      VERBOSE_LOGGING: ${env:FK_VERBOSE}
+    events:
+      - schedule: rate(1 minute)
 
 resources:
   Resources:
@@ -91,4 +101,9 @@ resources:
             KeyType: RANGE
         StreamSpecification:
           StreamViewType: NEW_IMAGE
+
+custom:
+  dynamodb:
+    stages:
+      - ${self:provider.stage}
 
