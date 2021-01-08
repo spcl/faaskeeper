@@ -95,7 +95,8 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
 @click.argument("provider", type=click.Choice(["aws", "gcp", "azure"]))
 @click.argument("service-name", type=str)
 @click.option("--port", type=int, default=-1)
-def cli(provider: str, service_name: str, port: int):
+@click.option("--verbose/--no-verbose", type=bool, default=False)
+def cli(provider: str, service_name: str, port: int, verbose: str):
     session = PromptSession(
         completer=fkCompleter,
         history=FileHistory('fk_history.txt'),
@@ -106,7 +107,7 @@ def cli(provider: str, service_name: str, port: int):
     counter = 0
     session_id = None
     try:
-        client = FaaSKeeperClient(provider, service_name, port)
+        client = FaaSKeeperClient(provider, service_name, port, verbose)
         client.start()
         status = "CONNECTED"
         session_id = client.session_id
