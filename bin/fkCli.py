@@ -48,7 +48,7 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
     if cmd in ['ls', 'logs']:
         if cmd == 'logs':
             click.echo_via_pager(client.logs())
-        return "CONNECTED", client.session_id
+        return client.session_status, client.session_id
 
     # create mapping
     function = getattr(client, clientAPIMapping[cmd])
@@ -60,7 +60,7 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
         for param in sig.parameters.values():
             msg += f" {param.name}:{param.annotation.__name__}"
         click.echo(msg)
-        return "CONNECTED", client.session_id
+        return client.session_status, client.session_id
 
     # convert arguments
     converted_arguments = []
@@ -83,13 +83,13 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
             client.stop()
         except TimeoutException:
             click.echo("Couldn't properly disconnect session.")
-        return "DISCONNECTED", None
+        return client.session_status, client.session_id
     except FaaSKeeperException as e:
         click.echo("Execution of the command failed.")
         click.echo(e)
         traceback.print_exc()
 
-    return "CONNECTED", client.session_id
+    return client.session_status, client.session_id
 
 @click.command()
 @click.argument("provider", type=click.Choice(["aws", "gcp", "azure"]))
