@@ -79,7 +79,10 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
     except TimeoutException as e:
         click.echo(e)
         click.echo("Closing down session.")
-        client.stop()
+        try:
+            client.stop()
+        except TimeoutException:
+            click.echo("Couldn't properly disconnect session.")
         return "DISCONNECTED", None
     except FaaSKeeperException as e:
         click.echo("Execution of the command failed.")
