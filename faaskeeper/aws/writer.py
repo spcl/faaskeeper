@@ -49,10 +49,17 @@ def create_node(id: str, write_event: dict, table_name: str, verbose_output: boo
     try:
         # TODO: ephemeral
         # TODO: sequential
-        # TODO: makepath
         path = get_object(write_event["path"])
         if verbose_output:
             print(f"Attempting to create node at {path}")
+
+        data = get_object(write_event["data"])
+
+        if isinstance(write_event["data"], dict):
+            parsed_data = "".join([chr(val) for val in data['data']])
+        else:
+            parsed_data = base64.b64decode(get_object(write_event["data"]))
+
         """
             Path is a reserved keyword in AWS DynamoDB - we must rename.
         """
@@ -60,15 +67,16 @@ def create_node(id: str, write_event: dict, table_name: str, verbose_output: boo
             TableName=f"{table_name}-data",
             Item={
                 "path": {"S": path},
-                "version": {"N": "0"},
-                "data": {"B": base64.b64decode(get_object(write_event["data"]))},
+                "data": {"B": parsed_data},
+                "dFxid": {"N": "0"},
+                "cFxid": {"N": "0"},
+                "mFxid": {"N": "0"},
+                "ephemeralOwner": {"S": ""},
             },
             ExpressionAttributeNames={"#P": "path"},
             ConditionExpression="attribute_not_exists(#P)",
             ReturnConsumedCapacity="TOTAL",
         )
-        print(get_object(write_event["data"]))
-        print(ret)
         return {"status": "success", "path": path, "version": 0}
     except dynamodb.exceptions.ConditionalCheckFailedException:
         return {"status": "failure", "path": path, "reason": "node_exists"}
@@ -103,10 +111,10 @@ def deregister_session(id: str, write_event: dict, table_name: str, verbose_outp
 
 def set_data(id: str, write_event: dict, table_name: str, verbose_output: bool):
 
-    print(write_event)
     if not verify_event(id, write_event, verbose_output):
         return None
     # FIXME: version
+    # FIXME: full conditional update
     try:
         path = get_object(write_event["path"])
         version = get_object(write_event["version"])
@@ -203,6 +211,8 @@ def handler(event: dict, context: dict):
     for record in events:
         if record["eventName"] == "INSERT":
             write_event = record["dynamodb"]["NewImage"]
+            print(write_event)
+            break
 
             op = get_object(write_event["op"])
             if op not in ops:
