@@ -23,8 +23,10 @@ provider:
             - Arn
 
 plugins:
+  - serverless-plugin-offline-dynamodb-stream
   - serverless-dynamodb-local
   - serverless-offline
+
 
 package:
   include:
@@ -55,10 +57,10 @@ functions:
               - StreamArn
   heartbeat:
     handler: faaskeeper/aws/heartbeat.handler
+    memorySize: 128
+    timeout: 70
     environment:
       VERBOSE_LOGGING: ${env:FK_VERBOSE}
-    events:
-      - schedule: rate(1 minute)
 
 resources:
   Resources:
@@ -101,9 +103,4 @@ resources:
             KeyType: RANGE
         StreamSpecification:
           StreamViewType: NEW_IMAGE
-
-custom:
-  dynamodb:
-    stages:
-      - ${self:provider.stage}
 
