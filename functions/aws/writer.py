@@ -17,7 +17,8 @@ mandatory_event_fields = [
 ]
 dynamodb = boto3.client("dynamodb")
 
-def verify_event(id: str, write_event:dict, verbose_output: bool, flags = []) -> bool:
+
+def verify_event(id: str, write_event: dict, verbose_output: bool, flags=[]) -> bool:
     """
         Handle malformed events correctly.
     """
@@ -31,6 +32,7 @@ def verify_event(id: str, write_event:dict, verbose_output: bool, flags = []) ->
         return False
     return True
 
+
 """
     The function has the following responsibilities:
     1) Create new node, returning success or failure if the node exists
@@ -41,7 +43,10 @@ def verify_event(id: str, write_event:dict, verbose_output: bool, flags = []) ->
     6) Look-up watches in a seperate table.
 """
 
-def create_node(id: str, write_event: dict, table_name: str, verbose_output: bool) -> Optional[dict]:
+
+def create_node(
+    id: str, write_event: dict, table_name: str, verbose_output: bool
+) -> Optional[dict]:
 
     if not verify_event(id, write_event, verbose_output, ["flags"]):
         return None
@@ -56,14 +61,15 @@ def create_node(id: str, write_event: dict, table_name: str, verbose_output: boo
         data = get_object(write_event["data"])
 
         if isinstance(write_event["data"], dict):
-            parsed_data = "".join([chr(val) for val in data['data']])
+            parsed_data = "".join([chr(val) for val in data["data"]])
         else:
             parsed_data = base64.b64decode(get_object(write_event["data"]))
 
         """
             Path is a reserved keyword in AWS DynamoDB - we must rename.
         """
-        ret = dynamodb.put_item(
+        # FIXME: check return value
+        dynamodb.put_item(
             TableName=f"{table_name}-data",
             Item={
                 "path": {"S": path},
@@ -86,28 +92,35 @@ def create_node(id: str, write_event: dict, table_name: str, verbose_output: boo
         print(e)
         return {"status": "failure", "reason": "unknown"}
 
-def deregister_session(id: str, write_event: dict, table_name: str, verbose_output: bool) -> dict:
+
+def deregister_session(
+    id: str, write_event: dict, table_name: str, verbose_output: bool
+) -> dict:
 
     session_id = get_object(write_event["session_id"])
     try:
         # TODO: remove ephemeral nodes
-        ret = dynamodb.delete_item(
+        # FIXME: check return value
+        dynamodb.delete_item(
             TableName=f"{table_name}-state",
-            Key={
-                "type": {"S": session_id}
-            },
+            Key={"type": {"S": session_id}},
             ReturnConsumedCapacity="TOTAL",
         )
         return {"status": "success", "session_id": session_id}
     except dynamodb.exceptions.ResourceNotFoundException:
         if verbose_output:
             print(f"Attempting to remove non-existing user {session_id}")
-        return {"status": "failure", "session_id": session_id, "reason": "session_does_not_exist"}
+        return {
+            "status": "failure",
+            "session_id": session_id,
+            "reason": "session_does_not_exist",
+        }
     except Exception as e:
         # Report failure to the user
         print("Failure!")
         print(e)
         return {"status": "failure", "reason": "unknown"}
+
 
 def set_data(id: str, write_event: dict, table_name: str, verbose_output: bool):
 
@@ -129,30 +142,24 @@ def set_data(id: str, write_event: dict, table_name: str, verbose_output: bool):
             TableName=f"{table_name}-data",
             Key={
                 "path": {"S": path},
-                #"version": {"N": version},
+                # "version": {"N": version},
             },
-            #AttributeUpdates={
+            # AttributeUpdates={
             #    "data": {
             #        "Value": {
             #            "B": base64.b64decode(get_object(write_event["data"]))
             #        }, #        "Action": { "PUT" }
             #    }
-            #},
-            #ExpressionAttributeNames={"#P": "path"},
-            #ConditionExpression="(attribute_not_exists(#P)) and (version = :version)",
+            # },
+            # ExpressionAttributeNames={"#P": "path"},
+            # ConditionExpression="(attribute_not_exists(#P)) and (version = :version)",
             ConditionExpression="(attribute_exists(#P)) and (version = :version)",
             UpdateExpression="SET #D = :data ADD version :inc",
             ExpressionAttributeNames={"#D": "data", "#P": "path"},
-            ExpressionAttributeValues= {
-                ":version": {
-                    "N": get_object(write_event["version"])
-                },
-                ":inc": {
-                    "N": "1"
-                },
-                ":data": {
-                    "B": base64.b64decode(get_object(write_event["data"]))
-                }
+            ExpressionAttributeValues={
+                ":version": {"N": get_object(write_event["version"])},
+                ":inc": {"N": "1"},
+                ":data": {"B": base64.b64decode(get_object(write_event["data"]))},
             },
             ReturnConsumedCapacity="TOTAL",
         )
@@ -176,7 +183,7 @@ ops: Dict[str, Callable[[dict, bool], dict]] = {
     "create_node": create_node,
     "set_data": set_data,
     "delete_node": delete_node,
-    "deregister_session": deregister_session
+    "deregister_session": deregister_session,
 }
 
 

@@ -35,6 +35,6 @@ def handler(event: dict, context: dict):
     except Exception as e:
         print(e)
 
-if __name__ == "__main__":
-    handler({},{})
 
+if __name__ == "__main__":
+    handler({}, {})
