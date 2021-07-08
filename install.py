@@ -5,6 +5,7 @@ import os
 import subprocess
 
 parser = argparse.ArgumentParser(description="Install FK and dependencies.")
+parser.add_argument('--venv', metavar='dir', type=str, default="python-venv", help='destination of local python and nodejs virtual environment')
 args = parser.parse_args()
 
 def execute(cmd):
@@ -17,7 +18,7 @@ def execute(cmd):
         )
     return ret.stdout.decode("utf-8")
 
-python_env_dir="python-venv"
+python_env_dir = args.venv
 
 print("Creating Python virtualenv at {}".format(python_env_dir))
 execute("python3 -mvenv {}".format(python_env_dir))
@@ -28,8 +29,12 @@ execute(". {}/bin/activate && pip3 install -r requirements.txt".format(python_en
 print("Configure mypy extensions")
 execute(". {}/bin/activate && mypy_boto3".format(python_env_dir))
 
-print("Creating Node virtualenv at {}".format(node_env_dir))
+print("Creating Node virtualenv at {}".format(python_env_dir))
 execute(". {}/bin/activate && nodeenv -p".format(python_env_dir))
+
 print("Install Node dependencies with npm")
 execute(". {}/bin/activate && npm install -g".format(python_env_dir))
+
+print("Install FaaSKeeper Python library")
+execute(". {}/bin/activate && pip install git+ssh://git@github.com/mcopik/faaskeeper-python.git".format(python_env_dir))
 
