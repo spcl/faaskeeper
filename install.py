@@ -36,5 +36,5 @@ print("Install Node dependencies with npm")
 execute(". {}/bin/activate && npm install -g".format(python_env_dir))
 
 print("Install FaaSKeeper Python library")
-execute(". {}/bin/activate && pip install git+ssh://git@github.com/mcopik/faaskeeper-python.git".format(python_env_dir))
+execute(". {}/bin/activate && pip install git+ssh://git@github.com/mcopik/faaskeeper-python.git --upgrade".format(python_env_dir))
 
