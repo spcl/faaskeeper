@@ -5,7 +5,7 @@ import logging
 import os
 import subprocess
 
-from faaskeeper.aws.init import init as aws_init
+from functions.aws.init import init as aws_init
 
 import click
 
