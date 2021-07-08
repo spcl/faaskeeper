@@ -24,7 +24,7 @@ def execute(cmd, shell=False, cwd=None, env=None):
 
 def common_params(func):
     @click.option('--provider', type=click.Choice(['aws', 'azure', 'gcp']), required=True)
-    @click.option('--verbose', type=bool, default=False)
+    @click.option('--verbose/--no-quiet', default=False)
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
@@ -43,7 +43,7 @@ def deploy(ctx):
 
 @deploy.command()
 @common_params
-@click.option('--clean', type=bool, default=False)
+@click.option('--clean/--no-clean', default=False)
 def service(provider: str, verbose: bool, clean: bool):
     env = {
         **os.environ,
@@ -53,7 +53,7 @@ def service(provider: str, verbose: bool, clean: bool):
         logging.info(f"Remove existing service at provider: {provider}")
         execute(f"sls remove -c config/{provider}.yml", env=env)
 
-    logging.info(f"Deploy service to provider: {provider}")
+    logging.info(f"Deploy service to provider: {provider}, verbose? {verbose}")
     execute(f"sls deploy -c config/{provider}.yml", env=env)
 
     #FIXME: other providers
