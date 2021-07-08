@@ -17,6 +17,9 @@ is planned in the future.
 
 We use the [serverless](https://www.serverless.com/) framework to manage the deployment of serverless
 functions and cloud resources. The framework with all dependencies and plugins is installed automatically.
+Configure the provider credentials according to instructions provided in the serverless framework,
+e.g., [instructions for AWS](https://www.serverless.com/framework/docs/providers/aws/guide/credentials/).
+
 
 Currently, serverless has a bug causing it to generate empty deployment packages ([bug 1](https://github.com/serverless-heaven/serverless-webpack/issues/682), [bug 2](https://github.com/serverless/serverless/issues/8794)),
 and the `node 15.4.0` is confirmed to work - any newer version is NOT guaranteed to work.
@@ -54,6 +57,8 @@ A CLI for FaaSKeeper is available in `bin/fkCli.py`. It allows to run interactiv
 and it includes history and command suggestions.
 
 ```console
+bin/fkCli.py aws faaskeeper-dev
+[fk: aws:faaskeeper-dev(CONNECTED) session:f3c1ba70 0] create /root/test1 "test_data" false false
 ```
 
 ## Development
