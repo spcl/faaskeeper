@@ -33,7 +33,7 @@ print("Creating Node virtualenv at {}".format(python_env_dir))
 execute(". {}/bin/activate && nodeenv -p".format(python_env_dir))
 
 print("Install Node dependencies with npm")
-execute(". {}/bin/activate && npm install -g".format(python_env_dir))
+execute(". {}/bin/activate && npm install -g serverless".format(python_env_dir))
 
 print("Install FaaSKeeper Python library")
 execute(". {}/bin/activate && pip install git+ssh://git@github.com/mcopik/faaskeeper-python.git --upgrade".format(python_env_dir))
