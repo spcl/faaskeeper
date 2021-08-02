@@ -3,6 +3,7 @@ import json
 import os
 import socket
 from typing import Dict, Callable, Optional
+import functions.aws.control.dynamo as storageControl
 
 import boto3
 
@@ -15,7 +16,8 @@ mandatory_event_fields = [
     "sourcePort",
     "data",
 ]
-dynamodb = boto3.client("dynamodb")
+
+storage = storageControl.DynamoStorage()
 
 
 def verify_event(id: str, write_event: dict, verbose_output: bool, flags=[]) -> bool:
@@ -69,22 +71,10 @@ def create_node(
             Path is a reserved keyword in AWS DynamoDB - we must rename.
         """
         # FIXME: check return value
-        dynamodb.put_item(
-            TableName=f"{table_name}-data",
-            Item={
-                "path": {"S": path},
-                "data": {"B": parsed_data},
-                "dFxid": {"N": "0"},
-                "cFxid": {"N": "0"},
-                "mFxid": {"N": "0"},
-                "ephemeralOwner": {"S": ""},
-            },
-            ExpressionAttributeNames={"#P": "path"},
-            ConditionExpression="attribute_not_exists(#P)",
-            ReturnConsumedCapacity="TOTAL",
-        )
+        storage.write(table_name, path, parsed_data)
+
         return {"status": "success", "path": path, "version": 0}
-    except dynamodb.exceptions.ConditionalCheckFailedException:
+    except storage.errorSupplier.ConditionalCheckFailedException:
         return {"status": "failure", "path": path, "reason": "node_exists"}
     except Exception as e:
         # Report failure to the user
@@ -101,13 +91,10 @@ def deregister_session(
     try:
         # TODO: remove ephemeral nodes
         # FIXME: check return value
-        dynamodb.delete_item(
-            TableName=f"{table_name}-state",
-            Key={"type": {"S": session_id}},
-            ReturnConsumedCapacity="TOTAL",
-        )
+        storage.delete(table_name, session_id)
+
         return {"status": "success", "session_id": session_id}
-    except dynamodb.exceptions.ResourceNotFoundException:
+    except storage.errorSupplier.ResourceNotFoundException:
         if verbose_output:
             print(f"Attempting to remove non-existing user {session_id}")
         return {
@@ -165,7 +152,7 @@ def set_data(id: str, write_event: dict, table_name: str, verbose_output: bool):
         )
         print(ret)
         return {"status": "success", "path": path, "version": 0}
-    except dynamodb.exceptions.ConditionalCheckFailedException as e:
+    except storage.errorSupplier.ConditionalCheckFailedException as e:
         print(e)
         return {"status": "failure", "path": path, "reason": "update_failure"}
     except Exception as e:
