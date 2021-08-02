@@ -1,12 +1,12 @@
 class Storage:
-    def write(self, path: str, data: str) -> str:
+    def write(self, storage_name: str, key: str, data: str):
         """S3/DynamoDB write"""
         pass
 
-    def read(self, full_file_name: str) -> str:
+    def read(self, storage_name: str, key: str):
         """S3/DynamoDB read"""
         pass
 
-    def delete(self, full_file_name: str) -> str:
+    def delete(self, storage_name: str, key: str):
         """S3/DynamoDB delete"""
         pass

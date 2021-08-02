@@ -1,12 +1,13 @@
 import boto3
 
-dynamodb = boto3.client("dynamodb")
-
 class Dynamo(Storage):
-    def write(self, path: str, table_name: str, data: str) -> str:
+    def __init__(self):
+        dynamodb = boto3.client("dynamodb")
+
+    def write(self, storage_name: str, key: str, data: str):
         """S3/DynamoDB write"""
         dynamodb.put_item(
-            TableName=f"{table_name}-data",
+            TableName=f"{storage_name}-data",
             Item={
                 "path": {"S": path},
                 "data": {"B": data},
@@ -20,14 +21,14 @@ class Dynamo(Storage):
             ReturnConsumedCapacity="TOTAL",
         )
 
-    def read(self, full_file_name: str) -> str:
+    def read(self, storage_name: str, key: str):
         """S3/DynamoDB read"""
-        pass
+        return client.get_item(TableName=storage_name, Key={'path':{'S':key}})
 
-    def delete(self, table_name: str, key: str) -> str:
+    def delete(self, storage_name: str, key: str):
         """S3/DynamoDB delete"""
         dynamodb.delete_item(
-            TableName=f"{table_name}-state",
+            TableName=f"{storage_name}-state",
             Key={"type": {"S": key}},
             ReturnConsumedCapacity="TOTAL",
         )
