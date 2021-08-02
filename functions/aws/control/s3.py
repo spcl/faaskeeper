@@ -7,22 +7,34 @@ class S3Storage(Storage):
     def __init__(self):
         self.s3 = boto3.client("s3")
 
-    def write(self, storage_name: str, key: str, data: str) -> str:
-        """S3/DynamoDB write"""
+    def write(self, storage_name: str, key: str, data: str):
+        """S3 write"""
 
-        s3.put_object(Body=data, Bucket=storage_name, Key=key)
+        s3.put_object(
+            Body=Storage._toSchema(key, data),
+            Bucket=storage_name,
+            Key=key
+        )
 
-    def read(self, storage_name: str, key: str) -> str:
-        """S3/DynamoDB read"""
+    def read(self, storage_name: str, key: str):
+        """S3 read"""
 
-        obj = s3.get_object(Bucket=storage_name, Key=key)
+        obj = s3.get_object(
+            Bucket=storage_name,
+            Key=key
+        )
 
         return obj.get()["Body"].read()
 
-    def delete(self, storage_name: str, key: str) -> str:
-        """S3/DynamoDB delete"""
+    def delete(self, storage_name: str, key: str):
+        """S3 delete"""
 
-        s3.delete_object(Bucket=storage_name, Key=key).delete()
+        s3.delete_object(
+            Bucket=storage_name,
+            Key=key
+        ).delete()
 
     def errorSupplier(self):
+        """S3 exceptions"""
+
         return s3.exceptions

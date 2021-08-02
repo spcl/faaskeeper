@@ -1,6 +1,13 @@
 class Storage:
-    def __init__(self):
-        super().__init__()
+    def _toSchema(self, key: str, data: str):
+        return {
+            "path": {"S": key},
+            "data": {"B": data},
+            "dFxid": {"N": "0"},
+            "cFxid": {"N": "0"},
+            "mFxid": {"N": "0"},
+            "ephemeralOwner": {"S": ""},
+        }
 
     def write(self, storage_name: str, key: str, data: str):
         pass
