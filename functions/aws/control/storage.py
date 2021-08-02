@@ -12,6 +12,9 @@ class Storage:
     def write(self, storage_name: str, key: str, data: str):
         pass
 
+    def update(self, storage_name: str, key: str, data: dict):
+        pass
+
     def read(self, storage_name: str, key: str):
         pass
 

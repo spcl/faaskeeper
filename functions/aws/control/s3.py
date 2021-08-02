@@ -16,6 +16,12 @@ class S3Storage(Storage):
             Key=key
         )
 
+    def update(self, storage_name: str, key: str, data: dict):
+        """S3 update"""
+
+        # FIXME
+        pass
+
     def read(self, storage_name: str, key: str):
         """S3 read"""
 
