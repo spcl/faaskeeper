@@ -234,11 +234,13 @@ def handler(event: dict, context: dict):
                     )
                 continue
 
-            ret = ops[op](record["eventID"], write_event, table_name, verbose_output)
+            ret = ops[op](record["eventID"], write_event,
+                          table_name, verbose_output)
             if not ret:
                 continue
             notify(write_event, ret)
             print(ret)
             processed_events += 1
 
-    print(f"Successfully processed {processed_events} records out of {len(events)}")
+    print(
+        f"Successfully processed {processed_events} records out of {len(events)}")
