@@ -28,17 +28,7 @@ class DynamoStorage(Storage):
             TableName=f"{storage_name}-data",
             Key={
                 "path": {"S": key},
-                # "version": {"N": version},
             },
-            # AttributeUpdates={
-            #    "data": {
-            #        "Value": {
-            #            "B": base64.b64decode(get_object(write_event["data"]))
-            #        }, #        "Action": { "PUT" }
-            #    }
-            # },
-            # ExpressionAttributeNames={"#P": "path"},
-            # ConditionExpression="(attribute_not_exists(#P)) and (version = :version)",
             ConditionExpression="(attribute_exists(#P)) and (version = :version)",
             UpdateExpression="SET #D = :data ADD version :inc",
             ExpressionAttributeNames={"#D": "data", "#P": "path"},
