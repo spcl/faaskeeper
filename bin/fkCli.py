@@ -48,7 +48,7 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
     if cmd in ['ls', 'logs']:
         if cmd == 'logs':
             click.echo_via_pager(client.logs())
-        return "CONNECTED", client.session_id
+        return client.session_status, client.session_id
 
     # create mapping
     function = getattr(client, clientAPIMapping[cmd])
@@ -60,7 +60,7 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
         for param in sig.parameters.values():
             msg += f" {param.name}:{param.annotation.__name__}"
         click.echo(msg)
-        return "CONNECTED", client.session_id
+        return client.session_status, client.session_id
 
     # convert arguments
     converted_arguments = []
@@ -79,20 +79,24 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
     except TimeoutException as e:
         click.echo(e)
         click.echo("Closing down session.")
-        client.stop()
-        return "DISCONNECTED", None
+        try:
+            client.stop()
+        except TimeoutException:
+            click.echo("Couldn't properly disconnect session.")
+        return client.session_status, client.session_id
     except FaaSKeeperException as e:
         click.echo("Execution of the command failed.")
         click.echo(e)
         traceback.print_exc()
 
-    return "CONNECTED", client.session_id
+    return client.session_status, client.session_id
 
 @click.command()
 @click.argument("provider", type=click.Choice(["aws", "gcp", "azure"]))
 @click.argument("service-name", type=str)
 @click.option("--port", type=int, default=-1)
-def cli(provider: str, service_name: str, port: int):
+@click.option("--verbose/--no-verbose", type=bool, default=False)
+def cli(provider: str, service_name: str, port: int, verbose: str):
     session = PromptSession(
         completer=fkCompleter,
         history=FileHistory('fk_history.txt'),
@@ -103,7 +107,7 @@ def cli(provider: str, service_name: str, port: int):
     counter = 0
     session_id = None
     try:
-        client = FaaSKeeperClient(provider, service_name, port)
+        client = FaaSKeeperClient(provider, service_name, port, verbose)
         client.start()
         status = "CONNECTED"
         session_id = client.session_id

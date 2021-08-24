@@ -1,0 +1,11 @@
+{
+  "name":"faaskeeper",
+  "description":"",
+  "version":"0.1.0",
+  "devDependencies": {
+    "serverless":"^2.51.1",
+    "serverless-dynamodb-local":"^0.2.39",
+    "serverless-plugin-offline-dynamodb-stream":"^1.0.20",
+    "serverless-offline-dynamodb-streams":"^4.2.0"
+  }
+}

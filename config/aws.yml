@@ -22,22 +22,19 @@ provider:
             - stateTable
             - Arn
 
-plugins:
-  - serverless-dynamodb-local
-  - serverless-offline
-
 package:
+  # this is horribly broken
+  # https://github.com/serverless/serverless/issues/4426
+  excludeDevDependencies: false
   include:
-    - faaskeeper/aws/**
-    - faaskeeper/core/**
-  exclude:
-    - faaskeeper/**
-    - config/**
-    - python-venv/**
+    - "!**"
+    - "!python-venv/**"
+    - functions/aws/**
+    - functions/core/**
 
 functions:
   writer:
-    handler: faaskeeper/aws/writer.handler
+    handler: functions/aws/writer.handler
     environment:
       VERBOSE_LOGGING: ${env:FK_VERBOSE}
     events:
@@ -53,12 +50,6 @@ functions:
             Fn::GetAtt:
               - writerTable
               - StreamArn
-  heartbeat:
-    handler: faaskeeper/aws/heartbeat.handler
-    environment:
-      VERBOSE_LOGGING: ${env:FK_VERBOSE}
-    events:
-      - schedule: rate(1 minute)
 
 resources:
   Resources:
@@ -101,9 +92,4 @@ resources:
             KeyType: RANGE
         StreamSpecification:
           StreamViewType: NEW_IMAGE
-
-custom:
-  dynamodb:
-    stages:
-      - ${self:provider.stage}
 
