@@ -30,26 +30,27 @@ To install the local development environment with all necessary packages, please
 script. The script takes one optional argument `--venv` with a path to the Python and Node.js virtual
 environment, and the default path is `python-venv`. Use `source {venv-path}/bin/activate` to use it.
 
-The deployment with `serverless` framework is wrapped with a helper executable `fk.py`. Use this
-to deploy the service with all functions, storage, and queue services:
+The deployment with `serverless` framework is wrapped with a helper executable `fk.py`.
+Use the JSON config example in `config/user_config.json` to change the deployment name and parameters.
+Use this to deploy the service with all functions, storage, and queue services:
 
 ```
-./fk.py deploy service --provider aws
+./fk.py deploy service --provider aws --config config/user_config.json
 ```
 
 To update functions, they can be redeployed separately:
 
 ```
-./fk.py deploy functions --provider aws
+./fk.py deploy functions --provider aws --config config/user_config.json
 ```
 
 The existing deployment can be cleared by removing entire service before redeployment:
 
 ```
-./fk.py deploy service --provider aws --clean
+./fk.py deploy service --provider aws --clean --config config/user_config.json
 ```
 
-To enable verbose debugging of functions, use the flag `--verbose`.
+To enable verbose debugging of functions, set the flag `verbose` in the config.
 
 ## Using CLI
 

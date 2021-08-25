@@ -36,7 +36,10 @@ functions:
   writer:
     handler: functions/aws/writer.handler
     environment:
+      DEPLOYMENT_NAME: ${env:FK_DEPLOYMENT_NAME}
       VERBOSE_LOGGING: ${env:FK_VERBOSE}
+      USER_STORAGE: ${env:FK_USER_STORAGE}
+      SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
     events:
       - http:
           path: fk
