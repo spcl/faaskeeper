@@ -1,0 +1,9 @@
+{
+  "verbose": true,
+  "deployment-name": "dev",
+  "user-storage": "persistent",
+  "system-storage": "key-value",
+  "heartbeat-frequency": 12,
+  "worker-queue": "key-value",
+  "distributor-queue": "key-value"
+}

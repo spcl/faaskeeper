@@ -70,7 +70,7 @@ def service(provider: str, config, clean: bool):
         "FK_WORKER_QUEUE": str(config_json["worker-queue"]),
         "FK_DISTRIBUTOR_QUEUE": str(config_json["distributor-queue"]),
     }
-    service_name = config_json["deployment_name"]
+    service_name = config_json["deployment-name"]
     if clean:
         logging.info(f"Remove existing service {service_name} at provider: {provider}")
         execute(f"sls remove --stage {service_name} -c config/{provider}.yml", env=env)
@@ -90,13 +90,14 @@ def functions(provider: str, config):
     env = {
         **os.environ,
         "FK_VERBOSE": str(config_json["verbose"]),
+        "FK_DEPLOYMENT_NAME": str(config_json["deployment-name"]),
         "FK_USER_STORAGE": str(config_json["user-storage"]),
         "FK_SYSTEM_STORAGE": str(config_json["system-storage"]),
         "FK_HEARTBEAT_FREQUENCY": str(config_json["heartbeat-frequency"]),
         "FK_WORKER_QUEUE": str(config_json["worker-queue"]),
         "FK_DISTRIBUTOR_QUEUE": str(config_json["distributor-queue"]),
     }
-    service_name = config_json["deployment_name"]
+    service_name = config_json["deployment-name"]
     logging.info(f"Deploy functions to service {service_name} at provider: {provider}")
 
     # FIXME: more functions
