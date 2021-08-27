@@ -223,7 +223,6 @@ def handler(event: dict, context: dict):
         if record["eventName"] == "INSERT":
             write_event = record["dynamodb"]["NewImage"]
             print(write_event)
-            break
 
             op = get_object(write_event["op"])
             if op not in ops:
