@@ -135,3 +135,5 @@ package-lock.json
 
 *.swp
 *.swo
+
+fk_history.txt
