@@ -23,7 +23,7 @@ jobs:
           pip install -r requirements.txt
       - name: Install FaaSKeeper client library
         run: |
-          pip install git+ssh://git@github.com/mcopik/faaskeeper-python.git --upgrade
+          pip install git+https://${{secrets.GITHUB_ACCESS_TOKEN}}@github.com/mcopik/faaskeeper-python.git --upgrade
       - name: Lint with flake8
         run: |
           tools/linting.py functions
@@ -31,4 +31,7 @@ jobs:
       - name: Test with pytest
         run: |
           FK_TEST_SERVICE_PORT=5000 FK_TEST_SERVICE_REGION="us-east-1" FK_TEST_SERVICE_NAME="faaskeeper-dev-marcin" pytest tests/*.py
+        env:
+          AWS_ACCESS_KEY_ID = ${{secrets.AWS_ACCESS_KEY_ID}}
+          AWS_SECRET_ACCESS_KEY = ${{secrets.AWS_SECRET_ACCESS_KEY}}
 
