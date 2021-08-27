@@ -23,7 +23,7 @@ jobs:
           pip install -r requirements.txt
       - name: Install FaaSKeeper client library
         run: |
-          pip install git+https://${{secrets.GITHUB_ACCESS_TOKEN}}@github.com/mcopik/faaskeeper-python.git --upgrade
+          pip install git+https://${{secrets.GH_ACCESS_TOKEN}}@github.com/mcopik/faaskeeper-python.git --upgrade
       - name: Lint with flake8
         run: |
           tools/linting.py functions
