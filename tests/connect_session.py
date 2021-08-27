@@ -45,5 +45,38 @@ def test_connection(client, request):
     except Exception as e:
         pytest.fail(f"Unexpected general exception {e}")
 
+@pytest.mark.parametrize("client", ["aws_connect"])
+def test_reconnection(client, request):
 
-#  reconnect after
+    client = request.getfixturevalue(client)
+
+    try:
+        client.start()
+        assert client.session_id
+        assert client.session_status == "CONNECTED"
+        old_session_id = client.session_id
+    except FaaSKeeperException as e:
+        pytest.fail(f"Unexpected FaaSKeeperException exception {e}")
+    except Exception as e:
+        pytest.fail(f"Unexpected general exception {e}")
+
+    try:
+        client.stop()
+        assert not client.session_id
+        assert client.session_status == "DISCONNECTED"
+    except FaaSKeeperException as e:
+        pytest.fail(f"Unexpected FaaSKeeperException exception {e}")
+    except Exception as e:
+        pytest.fail(f"Unexpected general exception {e}")
+
+    #  reconnect
+    try:
+        client.start()
+        assert client.session_id
+        # this should be a new session
+        assert client.session_id != old_session_id
+        assert client.session_status == "CONNECTED"
+    except FaaSKeeperException as e:
+        pytest.fail(f"Unexpected FaaSKeeperException exception {e}")
+    except Exception as e:
+        pytest.fail(f"Unexpected general exception {e}")
