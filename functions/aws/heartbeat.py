@@ -1,10 +1,10 @@
-from datetime import datetime
-import json
 import os
-import socket
-from typing import Dict, Callable, Optional
+from datetime import datetime
 
 import boto3
+
+# from typing import Callable, Dict, Optional
+
 
 mandatory_event_fields = [
     "op",

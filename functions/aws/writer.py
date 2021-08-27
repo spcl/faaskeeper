@@ -2,7 +2,7 @@ import base64
 import json
 import os
 import socket
-from typing import Dict, Callable, Optional
+from typing import Callable, Dict, Optional
 
 import boto3
 
@@ -63,7 +63,7 @@ def create_node(
         if isinstance(write_event["data"], dict):
             parsed_data = "".join([chr(val) for val in data["data"]])
         else:
-            parsed_data = base64.b64decode(get_object(write_event["data"]))
+            parsed_data = str(base64.b64decode(get_object(write_event["data"])))
 
         """
             Path is a reserved keyword in AWS DynamoDB - we must rename.
@@ -95,7 +95,7 @@ def create_node(
 
 def deregister_session(
     id: str, write_event: dict, table_name: str, verbose_output: bool
-) -> dict:
+) -> Optional[dict]:
 
     session_id = get_object(write_event["session_id"])
     try:
@@ -122,7 +122,9 @@ def deregister_session(
         return {"status": "failure", "reason": "unknown"}
 
 
-def set_data(id: str, write_event: dict, table_name: str, verbose_output: bool):
+def set_data(
+    id: str, write_event: dict, table_name: str, verbose_output: bool
+) -> Optional[dict]:
 
     if not verify_event(id, write_event, verbose_output):
         return None
@@ -175,11 +177,13 @@ def set_data(id: str, write_event: dict, table_name: str, verbose_output: bool):
         return {"status": "failure", "reason": "unknown"}
 
 
-def delete_node():
-    pass
+def delete_node(
+    id: str, write_event: dict, table_name: str, verbose_output: bool
+) -> Optional[dict]:
+    return None
 
 
-ops: Dict[str, Callable[[dict, bool], dict]] = {
+ops: Dict[str, Callable[[str, dict, str, bool], Optional[dict]]] = {
     "create_node": create_node,
     "set_data": set_data,
     "delete_node": delete_node,
