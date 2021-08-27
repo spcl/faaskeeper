@@ -106,6 +106,31 @@ def functions(provider: str, config):
         env=env,
     )
 
+@cli.group(invoke_without_command=True)
+@click.pass_context
+def remove(ctx):
+    if ctx.invoked_subcommand is None:
+        service.main()
+
+
+@remove.command(name="service")
+@common_params
+def remove_service(provider: str, config):
+
+    config_json = json.load(config)
+    env = {
+        **os.environ,
+        "FK_VERBOSE": str(config_json["verbose"]),
+        "FK_DEPLOYMENT_NAME": str(config_json["deployment-name"]),
+        "FK_USER_STORAGE": str(config_json["user-storage"]),
+        "FK_SYSTEM_STORAGE": str(config_json["system-storage"]),
+        "FK_HEARTBEAT_FREQUENCY": str(config_json["heartbeat-frequency"]),
+        "FK_WORKER_QUEUE": str(config_json["worker-queue"]),
+        "FK_DISTRIBUTOR_QUEUE": str(config_json["distributor-queue"]),
+    }
+    service_name = config_json["deployment-name"]
+    logging.info(f"Remove existing service {service_name} at provider: {provider}")
+    execute(f"sls remove --stage {service_name} -c config/{provider}.yml", env=env)
 
 if __name__ == "__main__":
     cli()
