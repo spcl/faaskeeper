@@ -27,5 +27,5 @@ jobs:
           tools/linting.py tests
       - name: Test with pytest
         run: |
-          FK_TEST_SERVICE_PORT=5000 FK_TEST_SERVICE_REGION="us-east-1" FK_TEST_SERVICE_NAME="faaskeeper-dev-marcin" pytest tests
+          FK_TEST_SERVICE_PORT=5000 FK_TEST_SERVICE_REGION="us-east-1" FK_TEST_SERVICE_NAME="faaskeeper-dev-marcin" pytest tests/*.py
 
