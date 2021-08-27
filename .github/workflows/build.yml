@@ -23,6 +23,7 @@ jobs:
       - name: Lint with flake8
         run: |
           tools/linting.py functions
+          tools/linting.py tests
           #- name: Test with pytest
           #  run: |
           #    pytest
