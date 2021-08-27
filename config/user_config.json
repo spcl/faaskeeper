@@ -1,6 +1,7 @@
 {
   "verbose": true,
-  "deployment-name": "dev",
+  "deployment-name": "dev-marcin",
+  "deployment-region": "us-east-1",
   "user-storage": "persistent",
   "system-storage": "key-value",
   "heartbeat-frequency": 12,

@@ -4,7 +4,7 @@ provider:
   name: aws
   runtime: python3.8
   stage: dev
-  region: us-east-1
+  region: ${env:FK_DEPLOYMENT_REGION}
   environment:
     DYNAMODB_TABLE: ${self:service}-${opt:stage, self:provider.stage}
   iamRoleStatements:

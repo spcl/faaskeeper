@@ -7,13 +7,18 @@ from faaskeeper.client import FaaSKeeperClient
 from faaskeeper.exceptions import FaaSKeeperException
 
 SERVICE_NAME = os.environ.get("FK_TEST_SERVICE_NAME")
+SERVICE_REGION = os.environ.get("FK_TEST_SERVICE_REGION")
 SERVICE_PORT = int(cast(str, os.environ.get("FK_TEST_SERVICE_PORT")))
 
 
 @pytest.fixture
 def aws_connect():
     return FaaSKeeperClient(
-        "aws", service_name=SERVICE_NAME, port=SERVICE_PORT, verbose=False
+        "aws",
+        service_name=SERVICE_NAME,
+        region=SERVICE_REGION,
+        port=SERVICE_PORT,
+        verbose=False,
     )
 
 
