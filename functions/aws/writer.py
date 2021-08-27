@@ -60,10 +60,10 @@ def create_node(
 
         data = get_object(write_event["data"])
 
-        if isinstance(write_event["data"], dict):
-            parsed_data = "".join([chr(val) for val in data["data"]])
-        else:
-            parsed_data = str(base64.b64decode(get_object(write_event["data"])))
+        #if isinstance(write_event["data"], dict):
+        #    parsed_data = "".join([chr(val) for val in data["data"]])
+        #else:
+        parsed_data = str(base64.b64decode(data))
 
         """
             Path is a reserved keyword in AWS DynamoDB - we must rename.
