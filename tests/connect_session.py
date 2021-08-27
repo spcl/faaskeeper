@@ -1,4 +1,5 @@
 import os
+from typing import cast
 
 import pytest
 
@@ -6,7 +7,7 @@ from faaskeeper.client import FaaSKeeperClient
 from faaskeeper.exceptions import FaaSKeeperException
 
 SERVICE_NAME = os.environ.get("FK_TEST_SERVICE_NAME")
-SERVICE_PORT = int(os.environ.get("FK_TEST_SERVICE_PORT"))
+SERVICE_PORT = int(cast(str, os.environ.get("FK_TEST_SERVICE_PORT")))
 
 
 @pytest.fixture
