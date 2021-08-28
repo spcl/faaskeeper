@@ -69,14 +69,16 @@ def create_node(
             Path is a reserved keyword in AWS DynamoDB - we must rename.
         """
         # FIXME: check return value
+        # FIXME: get counter value
         dynamodb.put_item(
             TableName=f"{table_name}-data",
             Item={
                 "path": {"S": path},
                 "data": {"B": parsed_data},
-                "dFxid": {"N": "0"},
-                "cFxid": {"N": "0"},
-                "mFxid": {"N": "0"},
+                "cFxidSys": {"L": [{"N" : "0"}]},
+                "cFxidEpoch": {"NS": ["0"]},
+                "mFxidSys": {"L": [{"N" : "0"}]},
+                "mFxidEpoch": {"NS": ["0"]},
                 "ephemeralOwner": {"S": ""},
             },
             ExpressionAttributeNames={"#P": "path"},
