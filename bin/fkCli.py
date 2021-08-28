@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import json
 import os
 import sys
 import traceback
@@ -73,7 +74,7 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
             converted_arguments.append(args[idx])
     try:
         ret = function(*converted_arguments)
-        click.echo(ret)
+        click.echo(json.dumps(ret.serialize()))
     except (NodeExistsException, BadVersionError, MalformedInputException) as e:
         click.echo(e)
     except TimeoutException as e:

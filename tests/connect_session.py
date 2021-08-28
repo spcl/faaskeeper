@@ -45,6 +45,7 @@ def test_connection(client, request):
     except Exception as e:
         pytest.fail(f"Unexpected general exception {e}")
 
+
 @pytest.mark.parametrize("client", ["aws_connect"])
 def test_reconnection(client, request):
 
