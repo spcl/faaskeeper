@@ -11,7 +11,7 @@ print("Code formatting of with Black")
 call("black", arg, "--config .black.toml")
 
 print("Import sorting with isort")
-call("isort", arg, "-p faaskeeper -l 88")
+call("isort", arg, "-p faaskeeper -l 88 --profile black")
 
 print("flake8 linting")
 call("flake8", arg, "--config=.flake8.cfg --black-config=.black.toml")
