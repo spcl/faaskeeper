@@ -2,6 +2,7 @@
   "verbose": true,
   "deployment-name": "testing",
   "deployment-region": "us-east-1",
+  "client-port": 5000,
   "user-storage": "persistent",
   "system-storage": "key-value",
   "heartbeat-frequency": 12,
