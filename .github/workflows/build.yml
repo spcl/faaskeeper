@@ -38,7 +38,7 @@ jobs:
         run: |
           echo 'FK_TEST_SERVICE_PORT='$(jq -r '."client-port"' tests/testing_config.json) >> $GITHUB_ENV
           echo 'FK_TEST_SERVICE_REGION='$(jq -r '."deployment-region"' tests/testing_config.json) >> $GITHUB_ENV
-          echo 'FK_TEST_SERVICE_NAME='$(jq -r '."deployment-name"' tests/testing_config.json) >> $GITHUB_ENV
+          echo 'FK_TEST_SERVICE_NAME=faaskeeper-'$(jq -r '."deployment-name"' tests/testing_config.json) >> $GITHUB_ENV
       - name: Test with pytest
         run: |
           pytest tests/*.py
