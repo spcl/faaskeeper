@@ -6,9 +6,9 @@ import logging
 import os
 import subprocess
 
-from functions.aws.init import init as aws_init
-
 import click
+
+from functions.aws.init import init as aws_init
 
 
 # Executing with shell provides options such as wildcard expansion
@@ -80,7 +80,7 @@ def service(provider: str, config, clean: bool):
     execute(f"sls deploy --stage {service_name} -c config/{provider}.yml", env=env)
 
     if provider == "aws":
-        aws_init(f"faaskeeper-{service_name}")
+        aws_init(f"faaskeeper-{service_name}", config_json["deployment-region"])
 
 
 @deploy.command()
@@ -108,6 +108,7 @@ def functions(provider: str, config):
         env=env,
     )
 
+
 @cli.group(invoke_without_command=True)
 @click.pass_context
 def remove(ctx):
@@ -134,6 +135,7 @@ def remove_service(provider: str, config):
     service_name = config_json["deployment-name"]
     logging.info(f"Remove existing service {service_name} at provider: {provider}")
     execute(f"sls remove --stage {service_name} -c config/{provider}.yml", env=env)
+
 
 if __name__ == "__main__":
     cli()

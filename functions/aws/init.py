@@ -1,9 +1,9 @@
 import boto3
 
 
-def init(service_name: str):
+def init(service_name: str, region: str):
 
-    dynamodb = boto3.client("dynamodb")
+    dynamodb = boto3.client("dynamodb", region=region)
     # clean state table
     dynamodb.put_item(
         TableName=f"{service_name}-state",
