@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
+import json
 import os
 import sys
 import traceback
+from datetime import datetime
 from inspect import signature
 from typing import List
 
@@ -73,7 +75,7 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
             converted_arguments.append(args[idx])
     try:
         ret = function(*converted_arguments)
-        click.echo(ret)
+        click.echo(json.dumps(ret.serialize()))
     except (NodeExistsException, BadVersionError, MalformedInputException) as e:
         click.echo(e)
     except TimeoutException as e:
@@ -94,9 +96,10 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
 @click.command()
 @click.argument("provider", type=click.Choice(["aws", "gcp", "azure"]))
 @click.argument("service-name", type=str)
+@click.argument("cloud-region", type=str)
 @click.option("--port", type=int, default=-1)
 @click.option("--verbose/--no-verbose", type=bool, default=False)
-def cli(provider: str, service_name: str, port: int, verbose: str):
+def cli(provider: str, service_name: str, cloud_region, port: int, verbose: str):
     session = PromptSession(
         completer=fkCompleter,
         history=FileHistory('fk_history.txt'),
@@ -107,7 +110,7 @@ def cli(provider: str, service_name: str, port: int, verbose: str):
     counter = 0
     session_id = None
     try:
-        client = FaaSKeeperClient(provider, service_name, port, verbose)
+        client = FaaSKeeperClient(provider, service_name, cloud_region, port, verbose)
         client.start()
         status = "CONNECTED"
         session_id = client.session_id
@@ -119,7 +122,7 @@ def cli(provider: str, service_name: str, port: int, verbose: str):
 
     while True:
         try:
-            text = session.prompt(f"[fk: {provider}:{service_name}({status}) session:{session_id} {counter}] ")
+            text = session.prompt(f"[fk: {datetime.now()} {provider}:{service_name}({status}) session:{session_id} {counter}] ")
         except KeyboardInterrupt:
             continue
         except EOFError:

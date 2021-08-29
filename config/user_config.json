@@ -1,0 +1,10 @@
+{
+  "verbose": true,
+  "deployment-name": "dev",
+  "deployment-region": "us-east-1",
+  "user-storage": "persistent",
+  "system-storage": "key-value",
+  "heartbeat-frequency": 12,
+  "worker-queue": "key-value",
+  "distributor-queue": "key-value"
+}

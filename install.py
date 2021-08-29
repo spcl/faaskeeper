@@ -6,6 +6,7 @@ import subprocess
 
 parser = argparse.ArgumentParser(description="Install FK and dependencies.")
 parser.add_argument('--venv', metavar='dir', type=str, default="python-venv", help='destination of local python and nodejs virtual environment')
+parser.add_argument('--without-client-library', action='store_true', default=False, help='skip installation of client library')
 args = parser.parse_args()
 
 def execute(cmd):
@@ -35,6 +36,7 @@ execute(". {}/bin/activate && nodeenv -p".format(python_env_dir))
 print("Install Node dependencies with npm")
 execute(". {}/bin/activate && npm install -g serverless".format(python_env_dir))
 
-print("Install FaaSKeeper Python library")
-execute(". {}/bin/activate && pip install git+ssh://git@github.com/mcopik/faaskeeper-python.git --upgrade".format(python_env_dir))
+if not args.without_client_library:
+    print("Install FaaSKeeper Python library")
+    execute(". {}/bin/activate && pip install git+ssh://git@github.com/mcopik/faaskeeper-python.git --upgrade".format(python_env_dir))
 
