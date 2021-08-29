@@ -13,13 +13,15 @@ SERVICE_PORT = int(cast(str, os.environ.get("FK_TEST_SERVICE_PORT")))
 
 @pytest.fixture
 def aws_connect():
-    return FaaSKeeperClient(
+    client = FaaSKeeperClient(
         "aws",
         service_name=SERVICE_NAME,
         region=SERVICE_REGION,
         port=SERVICE_PORT,
         verbose=False,
     )
+    yield client
+    client.stop()
 
 
 @pytest.mark.parametrize("client", ["aws_connect"])
@@ -77,6 +79,8 @@ def test_reconnection(client, request):
         # this should be a new session
         assert client.session_id != old_session_id
         assert client.session_status == "CONNECTED"
+
+        # client.stop()
     except FaaSKeeperException as e:
         pytest.fail(f"Unexpected FaaSKeeperException exception {e}")
     except Exception as e:

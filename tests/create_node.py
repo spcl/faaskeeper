@@ -15,7 +15,7 @@ SERVICE_REGION = os.environ.get("FK_TEST_SERVICE_REGION")
 SERVICE_PORT = int(cast(str, os.environ.get("FK_TEST_SERVICE_PORT")))
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope="module")
 def aws_connect():
     client = FaaSKeeperClient(
         "aws",
@@ -25,7 +25,8 @@ def aws_connect():
         verbose=False,
     )
     client.start()
-    return client
+    yield client
+    client.stop()
 
 
 @pytest.mark.parametrize("client", ["aws_connect"])
@@ -35,7 +36,6 @@ def test_create_node(client, request):
 
     # should succeed with no errors
     try:
-        client.start()
         node = client.create("/test_create", b"")
 
         assert node
@@ -54,7 +54,6 @@ def test_create_node_async(client, request):
 
     # should succeed with no errors
     try:
-        client.start()
         f = client.create_async("/test_create2", b"")
         node = f.get()
 
@@ -101,3 +100,4 @@ def test_create_node_repeated_async(client, request):
     with pytest.raises(NodeExistsException):
         f = client.create_async("/test_create4", b"")
         f.get()
+
