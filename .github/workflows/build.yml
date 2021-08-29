@@ -31,6 +31,9 @@ jobs:
       - name: Deploy service
         run: |
           source python-venv/bin/activate && ./fk.py deploy service --provider aws --config tests/testing_config.json
+        env:
+          AWS_ACCESS_KEY_ID: ${{secrets.AWS_ACCESS_KEY_ID}}
+          AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY}}
       - name: Set testing configuration
         run: |
           echo 'FK_TEST_SERVICE_PORT='$(jq -r '."client-port"' tests/testing_config.json) >> $GITHUB_ENV
@@ -45,4 +48,7 @@ jobs:
       - name: Clean service
         run: |
           source python-venv/bin/activate && ./fk.py remove service --provider aws --config tests/testing_config.json
+        env:
+          AWS_ACCESS_KEY_ID: ${{secrets.AWS_ACCESS_KEY_ID}}
+          AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY}}
 
