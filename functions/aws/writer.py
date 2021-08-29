@@ -1,10 +1,9 @@
 import base64
 import json
-import os
 import socket
 from typing import Callable, Dict, Optional
 
-import functions.aws.control.dynamo as storageControl
+from functions.aws.config import Config
 
 mandatory_event_fields = [
     "op",
@@ -16,7 +15,7 @@ mandatory_event_fields = [
     "data",
 ]
 
-storage = storageControl.DynamoStorage()
+config = Config.instance()
 
 
 def verify_event(id: str, write_event: dict, verbose_output: bool, flags=[]) -> bool:
@@ -45,9 +44,7 @@ def verify_event(id: str, write_event: dict, verbose_output: bool, flags=[]) -> 
 """
 
 
-def create_node(
-    id: str, write_event: dict, table_name: str, verbose_output: bool
-) -> Optional[dict]:
+def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]:
 
     if not verify_event(id, write_event, verbose_output, ["flags"]):
         return None
@@ -70,10 +67,10 @@ def create_node(
             Path is a reserved keyword in AWS DynamoDB - we must rename.
         """
         # FIXME: check return value
-        storage.write(table_name, path, parsed_data)
+        config.user_storage.write(path, parsed_data)
 
         return {"status": "success", "path": path, "version": 0}
-    except storage.errorSupplier.ConditionalCheckFailedException:
+    except config.user_storage.errorSupplier.ConditionalCheckFailedException:
         return {"status": "failure", "path": path, "reason": "node_exists"}
     except Exception as e:
         # Report failure to the user
@@ -83,17 +80,17 @@ def create_node(
 
 
 def deregister_session(
-    id: str, write_event: dict, table_name: str, verbose_output: bool
+    id: str, write_event: dict, verbose_output: bool
 ) -> Optional[dict]:
 
     session_id = get_object(write_event["session_id"])
     try:
         # TODO: remove ephemeral nodes
         # FIXME: check return value
-        storage.delete(table_name, session_id)
+        config.system_storage.delete(session_id)
 
         return {"status": "success", "session_id": session_id}
-    except storage.errorSupplier.ResourceNotFoundException:
+    except config.system_storage.errorSupplier.ResourceNotFoundException:
         if verbose_output:
             print(f"Attempting to remove non-existing user {session_id}")
         return {
@@ -108,9 +105,7 @@ def deregister_session(
         return {"status": "failure", "reason": "unknown"}
 
 
-def set_data(
-    id: str, write_event: dict, table_name: str, verbose_output: bool
-) -> Optional[dict]:
+def set_data(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]:
 
     if not verify_event(id, write_event, verbose_output):
         return None
@@ -152,7 +147,7 @@ def set_data(
         #    ReturnConsumedCapacity="TOTAL",
         # )
         return {"status": "success", "path": path, "version": 0}
-    except storage.errorSupplier.ConditionalCheckFailedException as e:
+    except config.user_storage.errorSupplier.ConditionalCheckFailedException as e:
         print(e)
         return {"status": "failure", "path": path, "reason": "update_failure"}
     except Exception as e:
@@ -162,13 +157,11 @@ def set_data(
         return {"status": "failure", "reason": "unknown"}
 
 
-def delete_node(
-    id: str, write_event: dict, table_name: str, verbose_output: bool
-) -> Optional[dict]:
+def delete_node(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]:
     return None
 
 
-ops: Dict[str, Callable[[str, dict, str, bool], Optional[dict]]] = {
+ops: Dict[str, Callable[[str, dict, bool], Optional[dict]]] = {
     "create_node": create_node,
     "set_data": set_data,
     "delete_node": delete_node,
@@ -200,8 +193,7 @@ def notify(write_event: dict, ret: dict):
 def handler(event: dict, context: dict):
 
     events = event["Records"]
-    verbose_output = os.environ["VERBOSE_LOGGING"]
-    table_name = os.environ["DYNAMODB_TABLE"]
+    verbose_output = config.verbose
     print(event)
     processed_events = 0
     for record in events:
@@ -222,7 +214,7 @@ def handler(event: dict, context: dict):
                     )
                 continue
 
-            ret = ops[op](record["eventID"], write_event, table_name, verbose_output)
+            ret = ops[op](record["eventID"], write_event, verbose_output)
             if not ret:
                 continue
             notify(write_event, ret)

@@ -1,34 +1,44 @@
 from abc import ABC, abstractmethod
+from typing import Union
 
 
 class Storage(ABC):
-    def _toSchema(self, key: str, data: str):
-        return {
-            "path": {"S": key},
-            "data": {"B": data},
-            "cFxidSys": {"L": [{"N": "0"}]},
-            "cFxidEpoch": {"NS": ["0"]},
-            "mFxidSys": {"L": [{"N": "0"}]},
-            "mFxidEpoch": {"NS": ["0"]},
-            "ephemeralOwner": {"S": ""},
-        }
+    def __init__(self, storage_name: str):
+        self._storage_name = storage_name
+
+    @property
+    def storage_name(self) -> str:
+        return self._storage_name
 
     @abstractmethod
-    def write(self, storage_name: str, key: str, data: str):
+    def write(self, key: str, data: Union[str, bytes]):
+        """
+            Write object or set of values to the storage.
+        """
         pass
 
     @abstractmethod
-    def update(self, storage_name: str, key: str, data: dict):
+    def update(self, key: str, data: dict):
+        """
+            Update existing object or set of values in the storage.
+        """
         pass
 
     @abstractmethod
-    def read(self, storage_name: str, key: str):
+    def read(self, key: str):
+        """
+            Read contents stored in the object/row in the storage.
+        """
         pass
 
     @abstractmethod
-    def delete(self, storage_name: str, key: str):
+    def delete(self, key: str):
+        """
+            Remove contents stored in the object/row in the storage.
+        """
         pass
 
+    @property
     @abstractmethod
     def errorSupplier(self):
         pass

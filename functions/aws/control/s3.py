@@ -1,6 +1,6 @@
 import boto3
 
-from functions.aws.control.storage import Storage
+from .storage import Storage
 
 
 class S3Storage(Storage):
