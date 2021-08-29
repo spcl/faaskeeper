@@ -2,10 +2,9 @@ import base64
 import json
 import os
 import socket
-from typing import Dict, Callable, Optional
-import functions.aws.control.dynamo as storageControl
+from typing import Callable, Dict, Optional
 
-import boto3
+import functions.aws.control.dynamo as storageControl
 
 mandatory_event_fields = [
     "op",
@@ -62,9 +61,9 @@ def create_node(
 
         data = get_object(write_event["data"])
 
-        #if isinstance(write_event["data"], dict):
+        # if isinstance(write_event["data"], dict):
         #    parsed_data = "".join([chr(val) for val in data["data"]])
-        #else:
+        # else:
         parsed_data = str(base64.b64decode(data))
 
         """
@@ -127,32 +126,31 @@ def set_data(
             Path is a reserved keyword in AWS DynamoDB - we must rename.
         """
         print(get_object(write_event["data"]))
-        ret = dynamodb.update_item(
-            TableName=f"{table_name}-data",
-            Key={
-                "path": {"S": path},
-                # "version": {"N": version},
-            },
-            # AttributeUpdates={
-            #    "data": {
-            #        "Value": {
-            #            "B": base64.b64decode(get_object(write_event["data"]))
-            #        }, #        "Action": { "PUT" }
-            #    }
-            # },
-            # ExpressionAttributeNames={"#P": "path"},
-            # ConditionExpression="(attribute_not_exists(#P)) and (version = :version)",
-            ConditionExpression="(attribute_exists(#P)) and (version = :version)",
-            UpdateExpression="SET #D = :data ADD version :inc",
-            ExpressionAttributeNames={"#D": "data", "#P": "path"},
-            ExpressionAttributeValues={
-                ":version": {"N": get_object(write_event["version"])},
-                ":inc": {"N": "1"},
-                ":data": {"B": base64.b64decode(get_object(write_event["data"]))},
-            },
-            ReturnConsumedCapacity="TOTAL",
-        )
-        print(ret)
+        # ret = dynamodb.update_item(
+        #    TableName=f"{table_name}-data",
+        #    Key={
+        #        "path": {"S": path},
+        #        # "version": {"N": version},
+        #    },
+        #    # AttributeUpdates={
+        #    #    "data": {
+        #    #        "Value": {
+        #    #            "B": base64.b64decode(get_object(write_event["data"]))
+        #    #        }, #        "Action": { "PUT" }
+        #    #    }
+        #    # },
+        #    # ExpressionAttributeNames={"#P": "path"},
+        #    # ConditionExpression="(attribute_not_exists(#P)) and (version = :version)",
+        #    ConditionExpression="(attribute_exists(#P)) and (version = :version)",
+        #    UpdateExpression="SET #D = :data ADD version :inc",
+        #    ExpressionAttributeNames={"#D": "data", "#P": "path"},
+        #    ExpressionAttributeValues={
+        #        ":version": {"N": get_object(write_event["version"])},
+        #        ":inc": {"N": "1"},
+        #        ":data": {"B": base64.b64decode(get_object(write_event["data"]))},
+        #    },
+        #    ReturnConsumedCapacity="TOTAL",
+        # )
         return {"status": "success", "path": path, "version": 0}
     except storage.errorSupplier.ConditionalCheckFailedException as e:
         print(e)
@@ -224,13 +222,11 @@ def handler(event: dict, context: dict):
                     )
                 continue
 
-            ret = ops[op](record["eventID"], write_event,
-                          table_name, verbose_output)
+            ret = ops[op](record["eventID"], write_event, table_name, verbose_output)
             if not ret:
                 continue
             notify(write_event, ret)
             print(ret)
             processed_events += 1
 
-    print(
-        f"Successfully processed {processed_events} records out of {len(events)}")
+    print(f"Successfully processed {processed_events} records out of {len(events)}")

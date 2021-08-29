@@ -1,16 +1,18 @@
-import boto3
 import base64
+
+import boto3
+
 from functions.aws.control.storage import Storage
 
 
 class DynamoStorage(Storage):
     def __init__(self):
-        self.dynamodb = boto3.client("dynamodb")
+        self._dynamodb = boto3.client("dynamodb")
 
     def write(self, storage_name: str, key: str, data: str):
         """DynamoDb write"""
 
-        dynamodb.put_item(
+        self._dynamodb.put_item(
             TableName=f"{storage_name}-data",
             Item=Storage._toSchema(key, data),
             ExpressionAttributeNames={"#P": "path"},
@@ -24,11 +26,9 @@ class DynamoStorage(Storage):
         def get_object(obj: dict):
             return next(iter(obj.values()))
 
-        dynamodb.update_item(
+        self._dynamodb.update_item(
             TableName=f"{storage_name}-data",
-            Key={
-                "path": {"S": key},
-            },
+            Key={"path": {"S": key}},
             ConditionExpression="(attribute_exists(#P)) and (version = :version)",
             UpdateExpression="SET #D = :data ADD version :inc",
             ExpressionAttributeNames={"#D": "data", "#P": "path"},
@@ -43,15 +43,12 @@ class DynamoStorage(Storage):
     def read(self, storage_name: str, key: str):
         """DynamoDb read"""
 
-        return dynamodb.get_item(
-            TableName=storage_name,
-            Key={'path': {'S': key}}
-        )
+        return self._dynamodb.get_item(TableName=storage_name, Key={"path": {"S": key}})
 
     def delete(self, storage_name: str, key: str):
         """DynamoDb delete"""
 
-        dynamodb.delete_item(
+        self._dynamodb.delete_item(
             TableName=f"{storage_name}-state",
             Key={"type": {"S": key}},
             ReturnConsumedCapacity="TOTAL",
@@ -60,4 +57,4 @@ class DynamoStorage(Storage):
     def errorSupplier(self):
         """DynamoDb exceptions"""
 
-        return dynamodb.exceptions
+        return self._dynamodb.exceptions

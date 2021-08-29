@@ -6,9 +6,9 @@ class Storage(ABC):
         return {
             "path": {"S": key},
             "data": {"B": data},
-            "cFxidSys": {"L": [{"N" : "0"}]},
+            "cFxidSys": {"L": [{"N": "0"}]},
             "cFxidEpoch": {"NS": ["0"]},
-            "mFxidSys": {"L": [{"N" : "0"}]},
+            "mFxidSys": {"L": [{"N": "0"}]},
             "mFxidEpoch": {"NS": ["0"]},
             "ephemeralOwner": {"S": ""},
         }
