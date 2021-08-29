@@ -15,8 +15,6 @@ provider:
         - dynamodb:PutItem
         - dynamodb:UpdateItem
         - dynamodb:DeleteItem
-        - s3:GetObject
-        - s3:PutObject
       Resource:
         - Fn::GetAtt:
             - dataTable
@@ -24,6 +22,19 @@ provider:
         - Fn::GetAtt:
             - stateTable
             - Arn
+    - Effect: Allow
+      Action:
+        - s3:GetObject
+        - s3:GetObjectAcl
+        - s3:PutObject
+        - s3:PutObjectAcl
+      Resource:
+        - Fn::Join:
+          - ""
+          - - Fn::GetAtt:
+                - dataBucket
+                - Arn
+            - "/*"
 
 package:
   # this is horribly broken
