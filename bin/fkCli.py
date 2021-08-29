@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import traceback
+from datetime import datetime
 from inspect import signature
 from typing import List
 
@@ -121,7 +122,7 @@ def cli(provider: str, service_name: str, cloud_region, port: int, verbose: str)
 
     while True:
         try:
-            text = session.prompt(f"[fk: {provider}:{service_name}({status}) session:{session_id} {counter}] ")
+            text = session.prompt(f"[fk: {datetime.now()} {provider}:{service_name}({status}) session:{session_id} {counter}] ")
         except KeyboardInterrupt:
             continue
         except EOFError:
