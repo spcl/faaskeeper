@@ -136,4 +136,6 @@ package-lock.json
 *.swp
 *.swo
 
+# NodeJs
+node_modules
 fk_history.txt
