@@ -77,6 +77,7 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
         # FIXME: distributor
         config.user_storage.write(path, base64.b64decode(data))
 
+        # FIXME: version
         return {"status": "success", "path": path, "version": 0}
     except Exception as e:
         # Report failure to the user
