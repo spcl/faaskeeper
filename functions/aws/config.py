@@ -38,7 +38,7 @@ class Config:
         )
         if self._system_storage_type == Storage.KEY_VALUE:
             self._system_storage = model.SystemDynamoStorage(
-                table_name=f"faaskeeper-{self._deployment_name}-state"
+                f"faaskeeper-{self._deployment_name}"
             )
         else:
             raise RuntimeError("Not implemented!")

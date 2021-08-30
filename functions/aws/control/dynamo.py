@@ -7,9 +7,10 @@ from .storage import Storage
 
 
 class DynamoStorage(Storage):
-    def __init__(self, table_name: str):
+    def __init__(self, table_name: str, key_name: str):
         super().__init__(table_name)
         self._dynamodb = boto3.client("dynamodb")
+        self._key_name = key_name
 
     def write(self, key: str, data: Union[bytes, str]):
         """DynamoDb write"""
@@ -18,7 +19,7 @@ class DynamoStorage(Storage):
         return self._dynamodb.put_item(
             TableName=self.storage_name,
             Item=data,
-            ExpressionAttributeNames={"#P": "path"},
+            ExpressionAttributeNames={"#P": self._key_name},
             ConditionExpression="attribute_not_exists(#P)",
             ReturnConsumedCapacity="TOTAL",
         )
@@ -31,7 +32,7 @@ class DynamoStorage(Storage):
 
         self._dynamodb.update_item(
             TableName=self.storage_name,
-            Key={"path": {"S": key}},
+            Key={self._key_name: {"S": key}},
             ConditionExpression="(attribute_exists(#P)) and (version = :version)",
             UpdateExpression="SET #D = :data ADD version :inc",
             ExpressionAttributeNames={"#D": "data", "#P": "path"},
@@ -47,15 +48,15 @@ class DynamoStorage(Storage):
         """DynamoDb read"""
 
         return self._dynamodb.get_item(
-            TableName=self.storage_name, Key={"path": {"S": key}}
+            TableName=self.storage_name, Key={self._key_name: {"S": key}}
         )
 
     def delete(self, key: str):
         """DynamoDb delete"""
 
         self._dynamodb.delete_item(
-            TableName=self.storage_name,
-            Key={"type": {"S": key}},
+            TableName=self._key_name,
+            Key={self._key_name: {"S": key}},
             ReturnConsumedCapacity="TOTAL",
         )
 

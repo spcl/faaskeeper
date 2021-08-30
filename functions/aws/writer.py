@@ -1,6 +1,7 @@
 import base64
 import json
 import socket
+from datetime import datetime
 from typing import Callable, Dict, Optional
 
 from functions.aws.config import Config
@@ -59,6 +60,9 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
 
         data = get_object(write_event["data"])
 
+        timestamp = int(datetime.now().timestamp())
+        config.system_storage.lock_node(path, timestamp)
+
         # if isinstance(write_event["data"], dict):
         #    parsed_data = "".join([chr(val) for val in data["data"]])
         # else:
@@ -90,7 +94,7 @@ def deregister_session(
     try:
         # TODO: remove ephemeral nodes
         # FIXME: check return value
-        config.system_storage.delete(session_id)
+        config.system_storage.delete_user(session_id)
 
         return {"status": "success", "session_id": session_id}
     except config.system_storage.errorSupplier.ResourceNotFoundException:

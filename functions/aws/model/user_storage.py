@@ -58,7 +58,7 @@ class DynamoStorage(Storage):
         }
 
     def __init__(self, table_name: str):
-        self._storage = DynamoDriver(table_name)
+        self._storage = DynamoDriver(table_name, "path")
 
     def write(self, key: str, data: bytes):
         try:
