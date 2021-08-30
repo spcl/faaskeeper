@@ -28,8 +28,8 @@ jobs:
           source python-venv/bin/activate && pip install git+https://${{secrets.GH_ACCESS_TOKEN}}@github.com/mcopik/faaskeeper-python.git --upgrade
       - name: Lint with flake8
         run: |
-          tools/linting.py functions
-          tools/linting.py tests
+          source python-venv/bin/activate && tools/linting.py functions
+          source python-venv/bin/activate && tools/linting.py tests
       - name: Deploy service
         run: |
           source python-venv/bin/activate && ./fk.py deploy service --provider ${{matrix.cloud-provider}} --config tests/${{matrix.cloud-provider}}_$(echo ${{matrix.user-storage}} | tr '-' '_').json
@@ -43,7 +43,7 @@ jobs:
           echo 'TEST_CONFIGURATION_JSON=tests/'${{matrix.cloud-provider}}_$(echo ${{matrix.user-storage}} | tr '-' '_').json >> $GITHUB_ENV
       - name: Test with pytest
         run: |
-          pytest tests/*.py
+          source python-venv/bin/activate && pytest tests/*.py
         env:
           AWS_ACCESS_KEY_ID: ${{secrets.AWS_ACCESS_KEY_ID}}
           AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY}}
