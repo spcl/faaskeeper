@@ -17,6 +17,7 @@ from prompt_toolkit.completion import WordCompleter
 
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, 'client'))
 
+from faaskeeper.config import CloudProvider, Config
 from faaskeeper.client import FaaSKeeperClient
 from faaskeeper.exceptions import FaaSKeeperException, TimeoutException, NodeExistsException, MalformedInputException, BadVersionError
 
@@ -94,12 +95,10 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
     return client.session_status, client.session_id
 
 @click.command()
-@click.argument("provider", type=click.Choice(["aws", "gcp", "azure"]))
-@click.argument("service-name", type=str)
-@click.argument("cloud-region", type=str)
+@click.argument("config", type=click.File('r'))
 @click.option("--port", type=int, default=-1)
 @click.option("--verbose/--no-verbose", type=bool, default=False)
-def cli(provider: str, service_name: str, cloud_region, port: int, verbose: str):
+def cli(config, port: int, verbose: str):
     session = PromptSession(
         completer=fkCompleter,
         history=FileHistory('fk_history.txt'),
@@ -109,8 +108,11 @@ def cli(provider: str, service_name: str, cloud_region, port: int, verbose: str)
     status = "DISCONNECTED"
     counter = 0
     session_id = None
+    cfg = Config.deserialize(json.load(config))
+    provider = CloudProvider.serialize(cfg.cloud_provider)
+    service_name = f"faaskeeper-{cfg.deployment_name}"
     try:
-        client = FaaSKeeperClient(provider, service_name, cloud_region, port, verbose)
+        client = FaaSKeeperClient(cfg, port, verbose)
         client.start()
         status = "CONNECTED"
         session_id = client.session_id
