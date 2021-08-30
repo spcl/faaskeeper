@@ -1,0 +1,12 @@
+{
+  "verbose": true,
+  "port": 5000,
+  "deployment-name": "testing-persistent",
+  "deployment-region": "us-east-1",
+  "client-port": 5000,
+  "user-storage": "persistent",
+  "system-storage": "key-value",
+  "heartbeat-frequency": 12,
+  "worker-queue": "key-value",
+  "distributor-queue": "key-value"
+}
