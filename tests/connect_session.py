@@ -1,6 +1,5 @@
 import json
 import os
-from typing import cast
 
 import pytest
 
@@ -15,15 +14,17 @@ USER_STORAGE = os.environ.get("TEST_USER_STORAGE")
 
 @pytest.fixture
 def aws_connect():
-    with open(CONFIGURATION_JSON, 'r') as config_file:
+    with open(CONFIGURATION_JSON, "r") as config_file:
         config = json.load(config_file)
         client = FaaSKeeperClient(
-            Config.deserialize({
-                **config,
-                'cloud-provider': CLOUD_PROVIDER,
-                'user-storage': USER_STORAGE
-            }),
-            port=config['port'],
+            Config.deserialize(
+                {
+                    **config,
+                    "cloud-provider": CLOUD_PROVIDER,
+                    "user-storage": USER_STORAGE,
+                }
+            ),
+            port=config["port"],
             verbose=False,
         )
         yield client

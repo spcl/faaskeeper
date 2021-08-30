@@ -103,7 +103,7 @@ class S3Storage:
         self._storage = S3Driver(bucket_name)
 
     def write(self, key: str, data: bytes):
-        ret = self._storage.write(key, self._serialize() + data)
+        self._storage.write(key, self._serialize() + data)
         return OpResult.SUCCESS
 
     @property

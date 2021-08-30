@@ -138,7 +138,6 @@ def set_data(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]
         #    #    }
         #    # },
         #    # ExpressionAttributeNames={"#P": "path"},
-        #    # ConditionExpression="(attribute_not_exists(#P)) and (version = :version)",
         #    ConditionExpression="(attribute_exists(#P)) and (version = :version)",
         #    UpdateExpression="SET #D = :data ADD version :inc",
         #    ExpressionAttributeNames={"#D": "data", "#P": "path"},
