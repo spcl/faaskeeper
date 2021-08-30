@@ -10,6 +10,8 @@ jobs:
     strategy:
       matrix:
          python-version: [3.7]
+         user-storage: [key-value]
+         cloud-provider: [aws]
          #python-version: [3.6, 3.7, 3.8, 3.9]
 
     steps:
@@ -30,15 +32,15 @@ jobs:
           tools/linting.py tests
       - name: Deploy service
         run: |
-          source python-venv/bin/activate && ./fk.py deploy service --provider aws --config tests/testing_config.json
+          source python-venv/bin/activate && ./fk.py deploy service --provider ${{matrix.cloud-provider}} --config tests/${{matrix.cloud-provider}}_$(echo ${{matrix.user-storage}} | tr '-' '_').json
         env:
           AWS_ACCESS_KEY_ID: ${{secrets.AWS_ACCESS_KEY_ID}}
           AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY}}
       - name: Set testing configuration
         run: |
-          echo 'FK_TEST_SERVICE_PORT='$(jq -r '."client-port"' tests/testing_config.json) >> $GITHUB_ENV
-          echo 'FK_TEST_SERVICE_REGION='$(jq -r '."deployment-region"' tests/testing_config.json) >> $GITHUB_ENV
-          echo 'FK_TEST_SERVICE_NAME=faaskeeper-'$(jq -r '."deployment-name"' tests/testing_config.json) >> $GITHUB_ENV
+          echo 'TEST_USER_STORAGE='${{ matrix.user-storage }} >> $GITHUB_ENV
+          echo 'TEST_CLOUD_PROVIDER='${{ matrix.cloud-provider }} >> $GITHUB_ENV
+          echo 'TEST_CONFIGURATION_JSON=tests/'${{matrix.cloud-provider}}_$(echo ${{matrix.user-storage}} | tr '-' '_').json >> $GITHUB_ENV
       - name: Test with pytest
         run: |
           pytest tests/*.py
@@ -47,7 +49,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY}}
       - name: Clean service
         run: |
-          source python-venv/bin/activate && ./fk.py remove service --provider aws --config tests/testing_config.json
+          source python-venv/bin/activate && ./fk.py remove service ${{matrix.cloud-provider}} --config tests/${{matrix.cloud-provider}}_$(echo ${{matrix.user-storage}} | tr '-' '_').json
         env:
           AWS_ACCESS_KEY_ID: ${{secrets.AWS_ACCESS_KEY_ID}}
           AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY}}
