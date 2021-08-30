@@ -20,6 +20,9 @@ provider:
             - dataTable
             - Arn
         - Fn::GetAtt:
+            - usersTable
+            - Arn
+        - Fn::GetAtt:
             - stateTable
             - Arn
     - Effect: Allow
