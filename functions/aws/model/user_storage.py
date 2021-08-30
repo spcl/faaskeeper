@@ -1,7 +1,16 @@
+import struct
 from abc import ABC, abstractmethod
-from typing import Union
+from enum import Enum
+from functools import reduce
+from typing import Set
 
 from functions.aws.control import DynamoStorage as DynamoDriver
+from functions.aws.control import S3Storage as S3Driver
+
+
+class OpResult(Enum):
+    SUCCESS = 0
+    NODE_EXISTS = 1
 
 
 class Storage(ABC):
@@ -9,7 +18,7 @@ class Storage(ABC):
         self._storage_name = storage_name
 
     @abstractmethod
-    def write(self, key: str, data: Union[str, bytes]):
+    def write(self, key: str, data: bytes):
         """
             Write object or set of values to the storage.
         """
@@ -36,7 +45,8 @@ class Storage(ABC):
 
 
 class DynamoStorage(Storage):
-    def _toSchema(self, key: str, data: str):
+    def _toSchema(self, key: str, data: bytes):
+        # FIXME: pass counter value
         return {
             "path": {"S": key},
             "data": {"B": data},
@@ -50,8 +60,12 @@ class DynamoStorage(Storage):
     def __init__(self, table_name: str):
         self._storage = DynamoDriver(table_name)
 
-    def write(self, key: str, data: str):
-        return self._storage.write(key, self._toSchema(key, data))
+    def write(self, key: str, data: bytes):
+        try:
+            self._storage.write(key, self._toSchema(key, data))
+            return OpResult.SUCCESS
+        except self.errorSupplier.ConditionalCheckFailedException:
+            return OpResult.NODE_EXISTS
 
     def update(self, key: str, data: dict):
         # FIXME define schema
@@ -63,4 +77,35 @@ class DynamoStorage(Storage):
 
 
 class S3Storage:
-    pass
+    def _serialize(self) -> bytes:
+        # FIXME: pass counter value
+        created_system = [0]
+        created_epoch: Set[int] = set()
+        modified_system = [0]
+        modified_epoch: Set[int] = set()
+
+        counters = [created_system, created_epoch, modified_system, modified_epoch]
+        total_length = reduce(lambda a, b: a + b, map(len, counters))
+        return struct.pack(
+            f"{5+total_length}I",
+            4 + total_length,
+            len(created_system),
+            *created_system,
+            len(created_epoch),
+            *created_epoch,
+            len(modified_system),
+            *modified_system,
+            len(modified_epoch),
+            *modified_epoch,
+        )
+
+    def __init__(self, bucket_name: str):
+        self._storage = S3Driver(bucket_name)
+
+    def write(self, key: str, data: bytes):
+        ret = self._storage.write(key, self._serialize() + data)
+        return OpResult.SUCCESS
+
+    @property
+    def errorSupplier(self):
+        return self._storage.errorSupplier

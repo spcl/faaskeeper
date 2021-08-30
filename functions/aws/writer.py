@@ -4,6 +4,7 @@ import socket
 from typing import Callable, Dict, Optional
 
 from functions.aws.config import Config
+from functions.aws.model.user_storage import OpResult
 
 mandatory_event_fields = [
     "op",
@@ -61,17 +62,19 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
         # if isinstance(write_event["data"], dict):
         #    parsed_data = "".join([chr(val) for val in data["data"]])
         # else:
-        parsed_data = str(base64.b64decode(data))
-
+        # print(data)
+        # print(type(data))
+        # parsed_data = base64.b64decode(data)
         """
             Path is a reserved keyword in AWS DynamoDB - we must rename.
         """
         # FIXME: check return value
-        config.user_storage.write(path, parsed_data)
+        ret = config.user_storage.write(path, base64.b64decode(data))
 
-        return {"status": "success", "path": path, "version": 0}
-    except config.user_storage.errorSupplier.ConditionalCheckFailedException:
-        return {"status": "failure", "path": path, "reason": "node_exists"}
+        if ret == OpResult.SUCCESS:
+            return {"status": "success", "path": path, "version": 0}
+        else:
+            return {"status": "failure", "path": path, "reason": "node_exists"}
     except Exception as e:
         # Report failure to the user
         print("Failure!")

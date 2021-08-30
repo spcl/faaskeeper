@@ -14,6 +14,7 @@ class DynamoStorage(Storage):
     def write(self, key: str, data: Union[bytes, str]):
         """DynamoDb write"""
 
+        print(data)
         return self._dynamodb.put_item(
             TableName=self.storage_name,
             Item=data,
