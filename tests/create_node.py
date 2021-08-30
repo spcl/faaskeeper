@@ -48,6 +48,11 @@ def test_create_node(client, request):
         assert node
         assert node.path == "/test_create"
 
+        read_node = client.get_data("/test_create")
+        assert read_node
+        assert read_node.path == "/test_create"
+        assert read_node.data == b""
+
     except FaaSKeeperException as e:
         pytest.fail(f"Unexpected FaaSKeeperException exception {e}")
     except Exception as e:
@@ -61,11 +66,17 @@ def test_create_node_async(client, request):
 
     # should succeed with no errors
     try:
-        f = client.create_async("/test_create2", b"")
+        f = client.create_async("/test_create2", b"1")
         node = f.get()
 
         assert node
         assert node.path == "/test_create2"
+
+        read_node = client.get_data("/test_create2")
+        assert read_node
+        assert read_node.path == "/test_create2"
+        assert read_node.data == b"1"
+
     except FaaSKeeperException as e:
         pytest.fail(f"Unexpected FaaSKeeperException exception {e}")
     except Exception as e:
