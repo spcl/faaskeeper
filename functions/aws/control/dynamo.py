@@ -55,7 +55,7 @@ class DynamoStorage(Storage):
         """DynamoDb delete"""
 
         self._dynamodb.delete_item(
-            TableName=self._key_name,
+            TableName=self.storage_name,
             Key={self._key_name: {"S": key}},
             ReturnConsumedCapacity="TOTAL",
         )
