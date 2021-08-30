@@ -2,10 +2,10 @@ import base64
 import json
 import socket
 from datetime import datetime
+from time import sleep
 from typing import Callable, Dict, Optional
 
 from functions.aws.config import Config
-from functions.aws.model.user_storage import OpResult
 
 mandatory_event_fields = [
     "op",
@@ -60,25 +60,24 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
 
         data = get_object(write_event["data"])
 
-        timestamp = int(datetime.now().timestamp())
-        config.system_storage.lock_node(path, timestamp)
+        # FIXME :limit number of attempts
+        while True:
+            timestamp = int(datetime.now().timestamp())
+            lock, cur_data = config.system_storage.lock_node(path, timestamp)
+            if not lock:
+                sleep(2)
+            else:
+                break
 
-        # if isinstance(write_event["data"], dict):
-        #    parsed_data = "".join([chr(val) for val in data["data"]])
-        # else:
-        # print(data)
-        # print(type(data))
-        # parsed_data = base64.b64decode(data)
-        """
-            Path is a reserved keyword in AWS DynamoDB - we must rename.
-        """
-        # FIXME: check return value
-        ret = config.user_storage.write(path, base64.b64decode(data))
-
-        if ret == OpResult.SUCCESS:
-            return {"status": "success", "path": path, "version": 0}
-        else:
+        # does the node exist?
+        if "mFxidSys" in cur_data:
             return {"status": "failure", "path": path, "reason": "node_exists"}
+
+        config.system_storage.commit_node(path, timestamp)
+        # FIXME: distributor
+        config.user_storage.write(path, base64.b64decode(data))
+
+        return {"status": "success", "path": path, "version": 0}
     except Exception as e:
         # Report failure to the user
         print("Failure!")
@@ -94,17 +93,16 @@ def deregister_session(
     try:
         # TODO: remove ephemeral nodes
         # FIXME: check return value
-        config.system_storage.delete_user(session_id)
-
-        return {"status": "success", "session_id": session_id}
-    except config.system_storage.errorSupplier.ResourceNotFoundException:
-        if verbose_output:
-            print(f"Attempting to remove non-existing user {session_id}")
-        return {
-            "status": "failure",
-            "session_id": session_id,
-            "reason": "session_does_not_exist",
-        }
+        if config.system_storage.delete_user(session_id):
+            return {"status": "success", "session_id": session_id}
+        else:
+            if verbose_output:
+                print(f"Attempting to remove non-existing user {session_id}")
+            return {
+                "status": "failure",
+                "session_id": session_id,
+                "reason": "session_does_not_exist",
+            }
     except Exception as e:
         # Report failure to the user
         print("Failure!")
