@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
 
 import json
-import os
-import sys
 import traceback
 from datetime import datetime
 from inspect import signature
 from typing import List
 
 import click
-
 from prompt_toolkit import PromptSession
-from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.history import FileHistory
 
-sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir, 'client'))
-
-from faaskeeper.config import CloudProvider, Config
 from faaskeeper.client import FaaSKeeperClient
-from faaskeeper.exceptions import FaaSKeeperException, TimeoutException, NodeExistsException, MalformedInputException, BadVersionError
+from faaskeeper.config import CloudProvider, Config
+from faaskeeper.exceptions import (
+    BadVersionError,
+    FaaSKeeperException,
+    MalformedInputException,
+    NodeExistsException,
+    TimeoutException,
+)
 
 keywords = [
     "help",
@@ -40,16 +41,17 @@ clientAPIMapping = {
     "get": "get_data",
     "set": "set_data",
     "close": "stop",
-    "connect": "start"
+    "connect": "start",
 }
 
-fkCompleter = WordCompleter(keywords, ignore_case = True)
+fkCompleter = WordCompleter(keywords, ignore_case=True)
+
 
 def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
 
     # process commands not offered by the API
-    if cmd in ['ls', 'logs']:
-        if cmd == 'logs':
+    if cmd in ["ls", "logs"]:
+        if cmd == "logs":
             click.echo_via_pager(client.logs())
         return client.session_status, client.session_id
 
@@ -94,15 +96,16 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
 
     return client.session_status, client.session_id
 
+
 @click.command()
-@click.argument("config", type=click.File('r'))
+@click.argument("config", type=click.File("r"))
 @click.option("--port", type=int, default=-1)
 @click.option("--verbose/--no-verbose", type=bool, default=False)
 def cli(config, port: int, verbose: str):
     session = PromptSession(
         completer=fkCompleter,
-        history=FileHistory('fk_history.txt'),
-        auto_suggest=AutoSuggestFromHistory()
+        history=FileHistory("fk_history.txt"),
+        auto_suggest=AutoSuggestFromHistory(),
     )
 
     status = "DISCONNECTED"
@@ -116,15 +119,17 @@ def cli(config, port: int, verbose: str):
         client.start()
         status = "CONNECTED"
         session_id = client.session_id
-    #FIXME: FK exceptions
+    # FIXME: FK exceptions
     except Exception as e:
         click.echo("Unable to connect")
         click.echo(e)
 
-
     while True:
         try:
-            text = session.prompt(f"[fk: {datetime.now()} {provider}:{service_name}({status}) session:{session_id} {counter}] ")
+            text = session.prompt(
+                f"[fk: {datetime.now()} {provider}:{service_name}({status}) "
+                f"session:{session_id} {counter}] "
+            )
         except KeyboardInterrupt:
             continue
         except EOFError:
@@ -132,12 +137,12 @@ def cli(config, port: int, verbose: str):
 
         cmds = text.split()
         if len(cmds) == 0:
-           continue 
+            continue
 
         cmd = cmds[0]
-        if cmd == 'quit':
+        if cmd == "quit":
             break
-        elif cmd == 'help':
+        elif cmd == "help":
             click.echo("Available commands")
             click.echo(keywords)
         elif cmd not in keywords:
@@ -147,6 +152,7 @@ def cli(config, port: int, verbose: str):
         counter += 1
 
     print("Closing...")
+
 
 if __name__ == "__main__":
     cli()
