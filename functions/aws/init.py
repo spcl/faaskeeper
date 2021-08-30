@@ -7,5 +7,5 @@ def init(service_name: str, region: str):
     # clean state table
     dynamodb.put_item(
         TableName=f"{service_name}-state",
-        Item={"type": {"S": "zxid"}, "value": {"N": "0"}},
+        Item={"path": {"S": "zxid"}, "value": {"N": "0"}},
     )

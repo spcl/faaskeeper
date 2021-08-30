@@ -77,10 +77,21 @@ resources:
         TableName: ${self:provider.environment.DYNAMODB_TABLE}-state
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
-          - AttributeName: type
+          - AttributeName: path
             AttributeType: S
         KeySchema:
-          - AttributeName: type
+          - AttributeName: path
+            KeyType: HASH
+    usersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}-users
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: user
+            AttributeType: S
+        KeySchema:
+          - AttributeName: user
             KeyType: HASH
     dataTable:
       Type: AWS::DynamoDB::Table
@@ -114,4 +125,12 @@ resources:
       Type: AWS::S3::Bucket
       Properties:
         BucketName: ${self:provider.environment.S3_BUCKET}-data
+
+plugins:
+  - serverless-s3-remover
+
+custom:
+  remover:
+    buckets:
+      - ${self:provider.environment.S3_BUCKET}-data
 
