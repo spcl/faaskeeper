@@ -1,27 +1,33 @@
+import json
 import os
 from typing import cast
 
 import pytest
 
 from faaskeeper.client import FaaSKeeperClient
+from faaskeeper.config import Config
 from faaskeeper.exceptions import FaaSKeeperException
 
-SERVICE_NAME = os.environ.get("FK_TEST_SERVICE_NAME")
-SERVICE_REGION = os.environ.get("FK_TEST_SERVICE_REGION")
-SERVICE_PORT = int(cast(str, os.environ.get("FK_TEST_SERVICE_PORT")))
+CONFIGURATION_JSON = os.environ.get("TEST_CONFIGURATION_JSON")
+CLOUD_PROVIDER = os.environ.get("TEST_CLOUD_PROVIDER")
+USER_STORAGE = os.environ.get("TEST_USER_STORAGE")
 
 
 @pytest.fixture
 def aws_connect():
-    client = FaaSKeeperClient(
-        "aws",
-        service_name=SERVICE_NAME,
-        region=SERVICE_REGION,
-        port=SERVICE_PORT,
-        verbose=False,
-    )
-    yield client
-    client.stop()
+    with open(CONFIGURATION_JSON, 'r') as config_file:
+        config = json.load(config_file)
+        client = FaaSKeeperClient(
+            Config.deserialize({
+                **config,
+                'cloud-provider': CLOUD_PROVIDER,
+                'user-storage': USER_STORAGE
+            }),
+            port=config['port'],
+            verbose=False,
+        )
+        yield client
+        client.stop()
 
 
 @pytest.mark.parametrize("client", ["aws_connect"])

@@ -1,5 +1,6 @@
 {
   "verbose": true,
+  "port": 5000,
   "deployment-name": "testing",
   "deployment-region": "us-east-1",
   "client-port": 5000,
