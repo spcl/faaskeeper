@@ -138,6 +138,7 @@ custom:
     buckets:
       - ${self:provider.environment.S3_BUCKET}-data
   pythonRequirements:
+    pythonBin: python3
     pipCmdExtraArgs:
       - --no-deps
     fileName: requirements-function.txt
