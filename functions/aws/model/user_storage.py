@@ -4,6 +4,7 @@ from enum import Enum
 from functools import reduce
 from typing import Set
 
+from faaskeeper.node import Node
 from functions.aws.control import DynamoStorage as DynamoDriver
 from functions.aws.control import S3Storage as S3Driver
 
@@ -18,13 +19,7 @@ class Storage(ABC):
         self._storage_name = storage_name
 
     @abstractmethod
-    def write(
-        self,
-        key: str,
-        data: bytes,
-        created_sys_counter: dict,
-        modified_sys_counter: dict,
-    ):
+    def write(self, node: Node):
         """
             Write object or set of values to the storage.
         """
@@ -51,32 +46,25 @@ class Storage(ABC):
 
 
 class DynamoStorage(Storage):
-    def _toSchema(self, key: str, data: bytes, created: dict, modified: dict):
-        # FIXME: pass counter value
+    def _toSchema(self, node: Node):
+        # FIXME: pass epoch counter value
         return {
-            "path": {"S": key},
-            "data": {"B": data},
-            "cFxidSys": created,
+            "path": {"S": node.path},
+            "data": {"B": node.data},
+            # "ephemeralOwner": {"S": ""},
+            "cFxidSys": node.created.system.version,
             "cFxidEpoch": {"NS": ["0"]},
-            "mFxidSys": modified,
+            "mFxidSys": node.modified.system.version,
             "mFxidEpoch": {"NS": ["0"]},
-            "ephemeralOwner": {"S": ""},
         }
 
     def __init__(self, table_name: str):
         self._storage = DynamoDriver(table_name, "path")
 
-    def write(
-        self,
-        key: str,
-        data: bytes,
-        created_sys_counter: dict,
-        modified_sys_counter: dict,
-    ):
+    def write(self, node: Node):
         try:
             self._storage.write(
-                key,
-                self._toSchema(key, data, created_sys_counter, modified_sys_counter),
+                node.path, self._toSchema(node),
             )
             return OpResult.SUCCESS
         except self.errorSupplier.ConditionalCheckFailedException:
@@ -92,10 +80,11 @@ class DynamoStorage(Storage):
 
 
 class S3Storage:
-    def _serialize(self, created: dict, modified: dict) -> bytes:
-        # FIXME: pass counter value
+    def _serialize(self, node: Node) -> bytes:
+        created = node.created.system.version
         created_system = [int(value) for v in created["L"] for key, value in v.items()]
         created_epoch: Set[int] = set()
+        modified = node.modified.system.version
         modified_system = [
             int(value) for v in modified["L"] for key, value in v.items()
         ]
@@ -119,16 +108,8 @@ class S3Storage:
     def __init__(self, bucket_name: str):
         self._storage = S3Driver(bucket_name)
 
-    def write(
-        self,
-        key: str,
-        data: bytes,
-        created_sys_counter: dict,
-        modified_sys_counter: dict,
-    ):
-        self._storage.write(
-            key, self._serialize(created_sys_counter, modified_sys_counter) + data
-        )
+    def write(self, node: Node):
+        self._storage.write(node.path, self._serialize(node) + node.data)
         return OpResult.SUCCESS
 
     @property

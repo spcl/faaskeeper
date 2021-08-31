@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple
 
+from faaskeeper.node import Node
+from faaskeeper.version import EpochCounter, SystemCounter, Version
 from functions.aws.control import DynamoStorage as DynamoDriver
 
 
@@ -21,15 +23,15 @@ class Storage(ABC):
         pass
 
     @abstractmethod
-    def lock_node(self, path: str, timestamp: int):
+    def lock_node(self, path: str, timestamp: int) -> Tuple[bool, Optional[Node]]:
         pass
 
     @abstractmethod
-    def commit_node(self, path: str, timestamp: int, sys_counter: dict):
+    def commit_node(self, node: Node, timestamp: int) -> bool:
         pass
 
     @abstractmethod
-    def increase_system_counter(self, writer_id: int):
+    def increase_system_counter(self, writer_id: int) -> Optional[SystemCounter]:
         pass
 
 
@@ -49,7 +51,7 @@ class DynamoStorage(Storage):
         except self._users_storage.errorSupplier.ConditionalCheckFailedException:
             return False
 
-    def lock_node(self, path: str, timestamp: int) -> Tuple[bool, dict]:
+    def lock_node(self, path: str, timestamp: int) -> Tuple[bool, Optional[Node]]:
 
         # FIXME: move this to the interface of control driver
         # we set the timelock value to the timestamp
@@ -72,11 +74,25 @@ class DynamoStorage(Storage):
                 ReturnValues="ALL_NEW",
                 ReturnConsumedCapacity="TOTAL",
             )
-            return (True, ret["Attributes"])
+            # store raw provider data
+            data = ret["Attributes"]
+            n: Optional[Node] = None
+            # node already exists
+            if "cFxidSys" in data:
+                n = Node(path)
+                n.created = Version(
+                    SystemCounter.from_provider_schema(data["cFxidSys"]),
+                    EpochCounter.from_provider_schema(data["cFxidEpoch"]),
+                )
+                n.modified = Version(
+                    SystemCounter.from_provider_schema(data["mFxidSys"]),
+                    EpochCounter.from_provider_schema(data["mFxidEpoch"]),
+                )
+            return (True, n)
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
-            return (False, {})
+            return (False, None)
 
-    def commit_node(self, path: str, timestamp: int, sys_counter: dict) -> bool:
+    def commit_node(self, node: Node, timestamp: int) -> bool:
 
         # FIXME: move this to the interface of control driver
         # we set the timelock value to the timestamp
@@ -86,7 +102,7 @@ class DynamoStorage(Storage):
             self._state_storage._dynamodb.update_item(
                 TableName=self._state_storage.storage_name,
                 # path to the node
-                Key={"path": {"S": path}},
+                Key={"path": {"S": node.path}},
                 # create timelock
                 UpdateExpression="REMOVE timelock SET mFxidSys= :modifiedStamp",
                 # lock doesn't exist or it's already expired
@@ -95,7 +111,7 @@ class DynamoStorage(Storage):
                 # timelock value
                 ExpressionAttributeValues={
                     ":mytimelock": {"N": str(timestamp)},
-                    ":modifiedStamp": sys_counter,
+                    ":modifiedStamp": node.modified.system.version,
                 },
                 ReturnConsumedCapacity="TOTAL",
             )
@@ -103,7 +119,7 @@ class DynamoStorage(Storage):
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return False
 
-    def increase_system_counter(self, writer_id: int) -> Optional[dict]:
+    def increase_system_counter(self, writer_id: int) -> Optional[SystemCounter]:
 
         try:
             ret = self._state_storage._dynamodb.update_item(
@@ -112,11 +128,11 @@ class DynamoStorage(Storage):
                 Key={"path": {"S": "fxid"}},
                 # add '1' to counter at given position
                 UpdateExpression=f"ADD #D[{writer_id}] :inc",
-                ExpressionAttributeNames={"#D": "data"},
+                ExpressionAttributeNames={"#D": "cFxidSys"},
                 ExpressionAttributeValues={":inc": {"N": "1"}},
                 ReturnValues="ALL_NEW",
                 ReturnConsumedCapacity="TOTAL",
             )
-            return ret["Attributes"]["data"]
+            return SystemCounter.from_provider_schema(ret["Attributes"]["cFxidSys"])
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return None

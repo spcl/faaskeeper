@@ -5,6 +5,8 @@ from datetime import datetime
 from time import sleep
 from typing import Callable, Dict, Optional
 
+from faaskeeper.node import Node
+from faaskeeper.version import Version
 from functions.aws.config import Config
 
 mandatory_event_fields = [
@@ -66,14 +68,14 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
         # FIXME :limit number of attempts
         while True:
             timestamp = int(datetime.now().timestamp())
-            lock, cur_data = config.system_storage.lock_node(path, timestamp)
+            lock, node = config.system_storage.lock_node(path, timestamp)
             if not lock:
                 sleep(2)
             else:
                 break
 
         # does the node exist?
-        if "mFxidSys" in cur_data:
+        if node is not None:
             return {"status": "failure", "path": path, "reason": "node_exists"}
 
         counter = config.system_storage.increase_system_counter(WRITER_ID)
@@ -81,15 +83,23 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
             return {"status": "failure", "reason": "unknown"}
 
         # FIXME: distributor
-        config.user_storage.write(path, base64.b64decode(data), counter, counter)
-        config.system_storage.commit_node(path, timestamp, counter)
+        # FIXME: epoch
+        # replace the modified version counter
+        node = Node(path)
+        node.created = Version(counter, None)
+        node.modified = Version(counter, None)
+        node.data = base64.b64decode(data)
+        config.user_storage.write(node)
+        config.system_storage.commit_node(node, timestamp)
 
         # FIXME: version
         return {"status": "success", "path": path, "version": 0}
-    except Exception as e:
+    except Exception:
         # Report failure to the user
         print("Failure!")
-        print(e)
+        import traceback
+
+        traceback.print_exc()
         return {"status": "failure", "reason": "unknown"}
 
 
