@@ -147,14 +147,14 @@ def set_data(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]
         # FIXME :limit number of attempts
         while True:
             timestamp = int(datetime.now().timestamp())
-            lock, node = config.system_storage.lock_node(path, timestamp)
+            lock, system_node = config.system_storage.lock_node(path, timestamp)
             if not lock:
                 sleep(2)
             else:
                 break
 
         # does the node exist?
-        if node is None:
+        if system_node is None:
             return {"status": "failure", "path": path, "reason": "node_doesnt_exist"}
 
         counter = config.system_storage.increase_system_counter(WRITER_ID)
@@ -173,6 +173,11 @@ def set_data(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]
         if not config.system_storage.commit_node(node, timestamp):
             return {"status": "failure", "reason": "unknown"}
 
+        """
+            On DynamoDB we skip updating the created version as it doesn't change.
+            On S3, we need to write this every single time.
+        """
+        node.created = Version(system_node.created.system, None)
         config.user_storage.update(node)
 
         return {

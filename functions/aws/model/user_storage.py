@@ -89,13 +89,10 @@ class DynamoStorage(Storage):
 
 class S3Storage:
     def _serialize(self, node: Node) -> bytes:
-        created = node.created.system.version
-        created_system = [int(value) for v in created["L"] for key, value in v.items()]
+
+        created_system = node.created.system.serialize()
         created_epoch: Set[int] = set()
-        modified = node.modified.system.version
-        modified_system = [
-            int(value) for v in modified["L"] for key, value in v.items()
-        ]
+        modified_system = node.modified.system.serialize()
         modified_epoch: Set[int] = set()
 
         counters = [created_system, created_epoch, modified_system, modified_epoch]
@@ -117,6 +114,10 @@ class S3Storage:
         self._storage = S3Driver(bucket_name)
 
     def write(self, node: Node):
+        self._storage.write(node.path, self._serialize(node) + node.data)
+        return OpResult.SUCCESS
+
+    def update(self, node: Node):
         self._storage.write(node.path, self._serialize(node) + node.data)
         return OpResult.SUCCESS
 
