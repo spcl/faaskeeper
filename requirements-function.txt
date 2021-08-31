@@ -1,1 +1,1 @@
-git+ssh://${GITHUB_ACCESS_TOKEN}@github.com/mcopik/faaskeeper-python.git
+git+https://${GITHUB_ACCESS_TOKEN}@github.com/mcopik/faaskeeper-python.git
