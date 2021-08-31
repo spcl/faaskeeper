@@ -142,6 +142,4 @@ custom:
       - --no-deps
     fileName: requirements-function.txt
     slim: true
-    downloadCache: true
-    staticCache: true
 
