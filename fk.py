@@ -70,6 +70,7 @@ def service(provider: str, config, clean: bool):
         "FK_HEARTBEAT_FREQUENCY": str(config_json["heartbeat-frequency"]),
         "FK_WORKER_QUEUE": str(config_json["worker-queue"]),
         "FK_DISTRIBUTOR_QUEUE": str(config_json["distributor-queue"]),
+        "SLS_DEBUG": "*"
     }
     service_name = config_json["deployment-name"]
     if clean:
@@ -77,7 +78,7 @@ def service(provider: str, config, clean: bool):
         execute(f"sls remove --stage {service_name} -c config/{provider}.yml", env=env)
 
     logging.info(f"Deploy service {service_name} to provider: {provider}")
-    execute(f"SLS_DEBUG=* sls deploy --stage {service_name} -c config/{provider}.yml", env=env)
+    execute(f"sls deploy --stage {service_name} -c config/{provider}.yml", env=env)
 
     if provider == "aws":
         aws_init(f"faaskeeper-{service_name}", config_json["deployment-region"])
