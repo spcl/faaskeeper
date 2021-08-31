@@ -32,7 +32,7 @@ jobs:
           source python-venv/bin/activate && tools/linting.py tests
       - name: Deploy service
         run: |
-          source python-venv/bin/activate && SLS_DEBUG=* ./fk.py deploy service --provider ${{matrix.cloud-provider}} --config tests/${{matrix.cloud-provider}}_$(echo ${{matrix.user-storage}} | tr '-' '_').json
+          source python-venv/bin/activate && echo ${GITHUB_ACCESS_TOKEN} && echo ${{GITHUB_ACCESS_TOKEN}} && SLS_DEBUG=* ./fk.py deploy service --provider ${{matrix.cloud-provider}} --config tests/${{matrix.cloud-provider}}_$(echo ${{matrix.user-storage}} | tr '-' '_').json
         env:
           AWS_ACCESS_KEY_ID: ${{secrets.AWS_ACCESS_KEY_ID}}
           AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY}}
