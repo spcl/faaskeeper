@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Optional, Tuple
 
 from functions.aws.control import DynamoStorage as DynamoDriver
 
@@ -25,7 +25,11 @@ class Storage(ABC):
         pass
 
     @abstractmethod
-    def commit_node(self, path: str, timestamp: int):
+    def commit_node(self, path: str, timestamp: int, sys_counter: dict):
+        pass
+
+    @abstractmethod
+    def increase_system_counter(self, writer_id: int):
         pass
 
 
@@ -72,7 +76,7 @@ class DynamoStorage(Storage):
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return (False, {})
 
-    def commit_node(self, path: str, timestamp: int) -> bool:
+    def commit_node(self, path: str, timestamp: int, sys_counter: dict) -> bool:
 
         # FIXME: move this to the interface of control driver
         # we set the timelock value to the timestamp
@@ -91,10 +95,28 @@ class DynamoStorage(Storage):
                 # timelock value
                 ExpressionAttributeValues={
                     ":mytimelock": {"N": str(timestamp)},
-                    ":modifiedStamp": {"L": [{"N": "0"}]},
+                    ":modifiedStamp": sys_counter,
                 },
                 ReturnConsumedCapacity="TOTAL",
             )
             return True
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return False
+
+    def increase_system_counter(self, writer_id: int) -> Optional[dict]:
+
+        try:
+            ret = self._state_storage._dynamodb.update_item(
+                TableName=self._state_storage.storage_name,
+                # path to the node
+                Key={"path": {"S": "fxid"}},
+                # add '1' to counter at given position
+                UpdateExpression=f"ADD #D[{writer_id}] :inc",
+                ExpressionAttributeNames={"#D": "data"},
+                ExpressionAttributeValues={":inc": {"N": "1"}},
+                ReturnValues="ALL_NEW",
+                ReturnConsumedCapacity="TOTAL",
+            )
+            return ret["Attributes"]["data"]
+        except self._state_storage.errorSupplier.ConditionalCheckFailedException:
+            return None

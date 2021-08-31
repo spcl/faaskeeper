@@ -18,7 +18,13 @@ class Storage(ABC):
         self._storage_name = storage_name
 
     @abstractmethod
-    def write(self, key: str, data: bytes):
+    def write(
+        self,
+        key: str,
+        data: bytes,
+        created_sys_counter: dict,
+        modified_sys_counter: dict,
+    ):
         """
             Write object or set of values to the storage.
         """
@@ -45,14 +51,14 @@ class Storage(ABC):
 
 
 class DynamoStorage(Storage):
-    def _toSchema(self, key: str, data: bytes):
+    def _toSchema(self, key: str, data: bytes, created: dict, modified: dict):
         # FIXME: pass counter value
         return {
             "path": {"S": key},
             "data": {"B": data},
-            "cFxidSys": {"L": [{"N": "0"}]},
+            "cFxidSys": created,
             "cFxidEpoch": {"NS": ["0"]},
-            "mFxidSys": {"L": [{"N": "0"}]},
+            "mFxidSys": modified,
             "mFxidEpoch": {"NS": ["0"]},
             "ephemeralOwner": {"S": ""},
         }
@@ -60,9 +66,18 @@ class DynamoStorage(Storage):
     def __init__(self, table_name: str):
         self._storage = DynamoDriver(table_name, "path")
 
-    def write(self, key: str, data: bytes):
+    def write(
+        self,
+        key: str,
+        data: bytes,
+        created_sys_counter: dict,
+        modified_sys_counter: dict,
+    ):
         try:
-            self._storage.write(key, self._toSchema(key, data))
+            self._storage.write(
+                key,
+                self._toSchema(key, data, created_sys_counter, modified_sys_counter),
+            )
             return OpResult.SUCCESS
         except self.errorSupplier.ConditionalCheckFailedException:
             return OpResult.NODE_EXISTS
@@ -77,11 +92,13 @@ class DynamoStorage(Storage):
 
 
 class S3Storage:
-    def _serialize(self) -> bytes:
+    def _serialize(self, created: dict, modified: dict) -> bytes:
         # FIXME: pass counter value
-        created_system = [0]
+        created_system = [int(value) for v in created["L"] for key, value in v.items()]
         created_epoch: Set[int] = set()
-        modified_system = [0]
+        modified_system = [
+            int(value) for v in modified["L"] for key, value in v.items()
+        ]
         modified_epoch: Set[int] = set()
 
         counters = [created_system, created_epoch, modified_system, modified_epoch]
@@ -102,8 +119,16 @@ class S3Storage:
     def __init__(self, bucket_name: str):
         self._storage = S3Driver(bucket_name)
 
-    def write(self, key: str, data: bytes):
-        self._storage.write(key, self._serialize() + data)
+    def write(
+        self,
+        key: str,
+        data: bytes,
+        created_sys_counter: dict,
+        modified_sys_counter: dict,
+    ):
+        self._storage.write(
+            key, self._serialize(created_sys_counter, modified_sys_counter) + data
+        )
         return OpResult.SUCCESS
 
     @property

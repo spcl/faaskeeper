@@ -35,6 +35,9 @@ def verify_event(id: str, write_event: dict, verbose_output: bool, flags=[]) -> 
     return True
 
 
+# FIXME: proper config
+WRITER_ID = 0
+
 """
     The function has the following responsibilities:
     1) Create new node, returning success or failure if the node exists
@@ -73,9 +76,13 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
         if "mFxidSys" in cur_data:
             return {"status": "failure", "path": path, "reason": "node_exists"}
 
-        config.system_storage.commit_node(path, timestamp)
+        counter = config.system_storage.increase_system_counter(WRITER_ID)
+        if counter is None:
+            return {"status": "failure", "reason": "unknown"}
+
         # FIXME: distributor
-        config.user_storage.write(path, base64.b64decode(data))
+        config.user_storage.write(path, base64.b64decode(data), counter, counter)
+        config.system_storage.commit_node(path, timestamp, counter)
 
         # FIXME: version
         return {"status": "success", "path": path, "version": 0}
