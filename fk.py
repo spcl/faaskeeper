@@ -70,12 +70,19 @@ def service(provider: str, config, clean: bool):
         "FK_HEARTBEAT_FREQUENCY": str(config_json["heartbeat-frequency"]),
         "FK_WORKER_QUEUE": str(config_json["worker-queue"]),
         "FK_DISTRIBUTOR_QUEUE": str(config_json["distributor-queue"]),
-        "SLS_DEBUG": "*"
+        "SLS_DEBUG": "*",
     }
     service_name = config_json["deployment-name"]
     if clean:
-        logging.info(f"Remove existing service {service_name} at provider: {provider}")
-        execute(f"sls remove --stage {service_name} -c config/{provider}.yml", env=env)
+        try:
+            logging.info(
+                f"Remove existing service {service_name} at provider: {provider}"
+            )
+            execute(
+                f"sls remove --stage {service_name} -c config/{provider}.yml", env=env
+            )
+        except Exception:
+            logging.warn("Removing service didn't succeed!")
 
     logging.info(f"Deploy service {service_name} to provider: {provider}")
     execute(f"sls deploy --stage {service_name} -c config/{provider}.yml", env=env)
