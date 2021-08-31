@@ -143,7 +143,7 @@ custom:
       - --no-deps
     fileName: requirements-function.txt
     slim: true
-    # doesnt't work with private git repositories as pip packages
     useDownloadCache: false
     useStaticCache: false
+    # doesnt't work with private git repositories as pip packages
 

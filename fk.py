@@ -77,7 +77,7 @@ def service(provider: str, config, clean: bool):
         execute(f"sls remove --stage {service_name} -c config/{provider}.yml", env=env)
 
     logging.info(f"Deploy service {service_name} to provider: {provider}")
-    execute(f"sls deploy --stage {service_name} -c config/{provider}.yml", env=env)
+    execute(f"SLS_DEBUG=* sls deploy --stage {service_name} -c config/{provider}.yml", env=env)
 
     if provider == "aws":
         aws_init(f"faaskeeper-{service_name}", config_json["deployment-region"])
