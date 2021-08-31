@@ -152,7 +152,13 @@ def cli(config, port: int, verbose: str):
         counter += 1
 
     print("Closing...")
+    try:
+        client.stop()
+    except Exception as e:
+        click.echo("Unable to close the session")
+        click.echo(e)
 
+    print("Session closed correctly.")
 
 if __name__ == "__main__":
     cli()
