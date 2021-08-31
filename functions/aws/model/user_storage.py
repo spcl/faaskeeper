@@ -12,6 +12,7 @@ from functions.aws.control import S3Storage as S3Driver
 class OpResult(Enum):
     SUCCESS = 0
     NODE_EXISTS = 1
+    NODE_DOESNT_EXIST = 2
 
 
 class Storage(ABC):
@@ -26,7 +27,7 @@ class Storage(ABC):
         pass
 
     @abstractmethod
-    def update(self, key: str, data: dict):
+    def update(self, node: Node):
         """
             Update existing object or set of values in the storage.
         """
@@ -48,15 +49,19 @@ class Storage(ABC):
 class DynamoStorage(Storage):
     def _toSchema(self, node: Node):
         # FIXME: pass epoch counter value
-        return {
+        schema = {
             "path": {"S": node.path},
             "data": {"B": node.data},
-            # "ephemeralOwner": {"S": ""},
-            "cFxidSys": node.created.system.version,
-            "cFxidEpoch": {"NS": ["0"]},
             "mFxidSys": node.modified.system.version,
             "mFxidEpoch": {"NS": ["0"]},
         }
+        if node.has_created:
+            schema = {
+                **schema,
+                "cFxidSys": node.created.system.version,
+                "cFxidEpoch": {"NS": ["0"]},
+            }
+        return schema
 
     def __init__(self, table_name: str):
         self._storage = DynamoDriver(table_name, "path")
@@ -70,9 +75,12 @@ class DynamoStorage(Storage):
         except self.errorSupplier.ConditionalCheckFailedException:
             return OpResult.NODE_EXISTS
 
-    def update(self, key: str, data: dict):
-        # FIXME define schema
-        return self._storage.update(key, data)
+    def update(self, node: Node):
+        try:
+            self._storage.update_node(node)
+            return OpResult.SUCCESS
+        except self.errorSupplier.ConditionalCheckFailedException:
+            return OpResult.NODE_DOESNT_EXIST
 
     @property
     def errorSupplier(self):

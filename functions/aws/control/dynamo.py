@@ -3,6 +3,8 @@ from typing import Union
 
 import boto3
 
+from faaskeeper.node import Node
+
 from .storage import Storage
 
 
@@ -33,7 +35,7 @@ class DynamoStorage(Storage):
         self._dynamodb.update_item(
             TableName=self.storage_name,
             Key={self._key_name: {"S": key}},
-            ConditionExpression="(attribute_exists(#P)) and (version = :version)",
+            ConditionExpression="attribute_exists(#P)",
             UpdateExpression="SET #D = :data ADD version :inc",
             ExpressionAttributeNames={"#D": "data", "#P": "path"},
             ExpressionAttributeValues={
@@ -41,6 +43,47 @@ class DynamoStorage(Storage):
                 ":inc": {"N": "1"},
                 ":data": {"B": base64.b64decode(get_object(data["data"]))},
             },
+            ReturnConsumedCapacity="TOTAL",
+        )
+
+    # def _toSchema(self, node: Node):
+    #    # FIXME: pass epoch counter value
+    #    schema = {
+    #        "path": {"S": node.path},
+    #        "data": {"B": node.data},
+    #        "mFxidSys": node.modified.system.version,
+    #        "mFxidEpoch": {"NS": ["0"]},
+    #    }
+    #    if node.created.system:
+    #        schema = {
+    #            **schema,
+    #            "cFxidSys": node.created.system.version,
+    #            "cFxidEpoch": {"NS": ["0"]},
+    #        }
+    #    return schema
+    def _toSchema(self, node: Node):
+        # FIXME: pass epoch counter value
+        schema = {
+            ":data": {"B": node.data},
+            ":mFxidSys": node.modified.system.version,
+            ":mFxidEpoch": {"NS": ["0"]},
+        }
+        return schema
+
+    def update_node(self, node: Node):
+
+        """
+            We update data and the modified counter.
+        """
+
+        update_expr = "SET #D = :data, mFxidSys = :mFxidSys, mFxidEpoch = :mFxidEpoch"
+        self._dynamodb.update_item(
+            TableName=self.storage_name,
+            Key={self._key_name: {"S": node.path}},
+            ConditionExpression="attribute_exists(#P)",
+            UpdateExpression=update_expr,
+            ExpressionAttributeNames={"#D": "data", "#P": "path"},
+            ExpressionAttributeValues=self._toSchema(node),
             ReturnConsumedCapacity="TOTAL",
         )
 

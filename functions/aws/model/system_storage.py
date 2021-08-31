@@ -107,11 +107,11 @@ class DynamoStorage(Storage):
         # FIXME: move this to the interface of control driver
         try:
             update_expr = "REMOVE timelock SET mFxidSys = :modifiedStamp"
-            if node.created.system is not None:
+            if node.has_created:
                 update_expr = f"{update_expr}, cFxidSys = :createdStamp"
 
             update_values = {":modifiedStamp": node.modified.system.version}
-            if node.created.system is not None:
+            if node.has_created:
                 update_values[":createdStamp"] = node.created.system.version
 
             self._state_storage._dynamodb.update_item(

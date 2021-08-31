@@ -89,8 +89,8 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
         node.created = Version(counter, None)
         node.modified = Version(counter, None)
         node.data = base64.b64decode(data)
-        config.user_storage.write(node)
         config.system_storage.commit_node(node, timestamp)
+        config.user_storage.write(node)
 
         # FIXME: version
         return {
@@ -134,52 +134,58 @@ def deregister_session(
 
 def set_data(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]:
 
-    if not verify_event(id, write_event, verbose_output):
-        return None
     # FIXME: version
     # FIXME: full conditional update
+    if not verify_event(id, write_event, verbose_output):
+        return None
     try:
         path = get_object(write_event["path"])
-        version = get_object(write_event["version"])
-        print(version)
+        # version = get_object(write_event["version"])
         if verbose_output:
             print(f"Attempting to write data at {path}")
-        """
-            Path is a reserved keyword in AWS DynamoDB - we must rename.
-        """
-        print(get_object(write_event["data"]))
-        # ret = dynamodb.update_item(
-        #    TableName=f"{table_name}-data",
-        #    Key={
-        #        "path": {"S": path},
-        #        # "version": {"N": version},
-        #    },
-        #    # AttributeUpdates={
-        #    #    "data": {
-        #    #        "Value": {
-        #    #            "B": base64.b64decode(get_object(write_event["data"]))
-        #    #        }, #        "Action": { "PUT" }
-        #    #    }
-        #    # },
-        #    # ExpressionAttributeNames={"#P": "path"},
-        #    ConditionExpression="(attribute_exists(#P)) and (version = :version)",
-        #    UpdateExpression="SET #D = :data ADD version :inc",
-        #    ExpressionAttributeNames={"#D": "data", "#P": "path"},
-        #    ExpressionAttributeValues={
-        #        ":version": {"N": get_object(write_event["version"])},
-        #        ":inc": {"N": "1"},
-        #        ":data": {"B": base64.b64decode(get_object(write_event["data"]))},
-        #    },
-        #    ReturnConsumedCapacity="TOTAL",
-        # )
-        return {"status": "success", "path": path, "version": 0}
-    except config.user_storage.errorSupplier.ConditionalCheckFailedException as e:
-        print(e)
-        return {"status": "failure", "path": path, "reason": "update_failure"}
-    except Exception as e:
+
+        # FIXME :limit number of attempts
+        while True:
+            timestamp = int(datetime.now().timestamp())
+            lock, node = config.system_storage.lock_node(path, timestamp)
+            if not lock:
+                sleep(2)
+            else:
+                break
+
+        # does the node exist?
+        if node is None:
+            return {"status": "failure", "path": path, "reason": "node_doesnt_exist"}
+
+        counter = config.system_storage.increase_system_counter(WRITER_ID)
+        if counter is None:
+            return {"status": "failure", "reason": "unknown"}
+
+        # FIXME: distributor
+        # FIXME: epoch
+        # store only the new data and the modified version counter
+
+        data = get_object(write_event["data"])
+        node = Node(path)
+        node.modified = Version(counter, None)
+        node.data = base64.b64decode(data)
+
+        if not config.system_storage.commit_node(node, timestamp):
+            return {"status": "failure", "reason": "unknown"}
+
+        config.user_storage.update(node)
+
+        return {
+            "status": "success",
+            "path": path,
+            "modified_system_counter": node.modified.system.serialize(),
+        }
+    except Exception:
         # Report failure to the user
         print("Failure!")
-        print(e)
+        import traceback
+
+        traceback.print_exc()
         return {"status": "failure", "reason": "unknown"}
 
 
