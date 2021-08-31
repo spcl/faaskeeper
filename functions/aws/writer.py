@@ -84,7 +84,7 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
 
         # FIXME: distributor
         # FIXME: epoch
-        # replace the modified version counter
+        # store the created and the modified version counter
         node = Node(path)
         node.created = Version(counter, None)
         node.modified = Version(counter, None)
@@ -93,7 +93,11 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
         config.system_storage.commit_node(node, timestamp)
 
         # FIXME: version
-        return {"status": "success", "path": path, "version": 0}
+        return {
+            "status": "success",
+            "path": path,
+            "system_counter": node.created.system.serialize(),
+        }
     except Exception:
         # Report failure to the user
         print("Failure!")

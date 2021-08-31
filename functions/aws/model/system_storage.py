@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Tuple
 
 from faaskeeper.node import Node
-from faaskeeper.version import EpochCounter, SystemCounter, Version
+from faaskeeper.version import SystemCounter, Version
 from functions.aws.control import DynamoStorage as DynamoDriver
 
 
@@ -82,11 +82,13 @@ class DynamoStorage(Storage):
                 n = Node(path)
                 n.created = Version(
                     SystemCounter.from_provider_schema(data["cFxidSys"]),
-                    EpochCounter.from_provider_schema(data["cFxidEpoch"]),
+                    None
+                    # EpochCounter.from_provider_schema(data["cFxidEpoch"]),
                 )
                 n.modified = Version(
                     SystemCounter.from_provider_schema(data["mFxidSys"]),
-                    EpochCounter.from_provider_schema(data["mFxidEpoch"]),
+                    None
+                    # EpochCounter.from_provider_schema(data["mFxidEpoch"]),
                 )
             return (True, n)
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
@@ -94,24 +96,37 @@ class DynamoStorage(Storage):
 
     def commit_node(self, node: Node, timestamp: int) -> bool:
 
+        """
+            We need to make sure that we're still the ones holding a timelock.
+            Then, we need to remove the timelock and update counters.
+
+            Depending on the usage, we always modify the modified timestamp (modify),
+            but we might also store the created timestamp (create node).
+        """
+
         # FIXME: move this to the interface of control driver
-        # we set the timelock value to the timestamp
-        # for comparison, we subtract from the timestamp the maximum lock holding time
         try:
-            # FIXME: proper version update
+            update_expr = "REMOVE timelock SET mFxidSys = :modifiedStamp"
+            if node.created.system is not None:
+                update_expr = f"{update_expr}, cFxidSys = :createdStamp"
+
+            update_values = {":modifiedStamp": node.modified.system.version}
+            if node.created.system is not None:
+                update_values[":createdStamp"] = node.created.system.version
+
             self._state_storage._dynamodb.update_item(
                 TableName=self._state_storage.storage_name,
                 # path to the node
                 Key={"path": {"S": node.path}},
                 # create timelock
-                UpdateExpression="REMOVE timelock SET mFxidSys= :modifiedStamp",
+                UpdateExpression=update_expr,
                 # lock doesn't exist or it's already expired
                 ConditionExpression="(attribute_exists(timelock)) "
                 "and (timelock = :mytimelock)",
                 # timelock value
                 ExpressionAttributeValues={
                     ":mytimelock": {"N": str(timestamp)},
-                    ":modifiedStamp": node.modified.system.version,
+                    **update_values,
                 },
                 ReturnConsumedCapacity="TOTAL",
             )
