@@ -18,6 +18,7 @@ from faaskeeper.exceptions import (
     BadVersionError,
     FaaSKeeperException,
     MalformedInputException,
+    NodeDoesntExistException,
     NodeExistsException,
     TimeoutException,
 )
@@ -79,7 +80,12 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
     try:
         ret = function(*converted_arguments)
         click.echo(json.dumps(ret.serialize()))
-    except (NodeExistsException, BadVersionError, MalformedInputException) as e:
+    except (
+        NodeExistsException,
+        NodeDoesntExistException,
+        BadVersionError,
+        MalformedInputException,
+    ) as e:
         click.echo(e)
     except TimeoutException as e:
         click.echo(e)
@@ -159,6 +165,7 @@ def cli(config, port: int, verbose: str):
         click.echo(e)
 
     print("Session closed correctly.")
+
 
 if __name__ == "__main__":
     cli()
