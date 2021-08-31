@@ -131,9 +131,17 @@ resources:
 
 plugins:
   - serverless-s3-remover
+  - serverless-python-requirements
 
 custom:
   remover:
     buckets:
       - ${self:provider.environment.S3_BUCKET}-data
+  pythonRequirements:
+    pipCmdExtraArgs:
+      - --no-deps
+    fileName: requirements-function.txt
+    slim: true
+    downloadCache: true
+    staticCache: true
 
