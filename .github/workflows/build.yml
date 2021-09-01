@@ -44,7 +44,7 @@ jobs:
           echo 'TEST_CONFIGURATION_JSON=tests/'${{matrix.cloud-provider}}_$(echo ${{matrix.user-storage}} | tr '-' '_').json >> $GITHUB_ENV
       - name: Test with pytest
         run: |
-          source python-venv/bin/activate && sleep 15 && pytest tests/*.py
+          source python-venv/bin/activate && sleep 30 && pytest tests/*.py
         env:
           AWS_ACCESS_KEY_ID: ${{secrets.AWS_ACCESS_KEY_ID}}
           AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY}}
