@@ -52,6 +52,10 @@ def test_create_node(client, request):
         assert read_node
         assert read_node.path == "/test_create"
         assert read_node.data == b""
+        # creeate returned correct timestamp
+        assert node.created.system == read_node.created.system
+        # created timestamp same as modified
+        assert read_node.created.system == read_node.modified.system
 
     except FaaSKeeperException as e:
         pytest.fail(f"Unexpected FaaSKeeperException exception {e}")
@@ -76,6 +80,7 @@ def test_create_node_async(client, request):
         assert read_node
         assert read_node.path == "/test_create2"
         assert read_node.data == b"1"
+        assert read_node.created.system == read_node.modified.system
 
     except FaaSKeeperException as e:
         pytest.fail(f"Unexpected FaaSKeeperException exception {e}")
