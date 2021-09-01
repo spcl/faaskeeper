@@ -5,13 +5,18 @@ import pytest
 
 from faaskeeper.client import FaaSKeeperClient
 from faaskeeper.config import Config
-from faaskeeper.exceptions import FaaSKeeperException, NodeDoesntExistException, MalformedInputException
+from faaskeeper.exceptions import (
+    FaaSKeeperException,
+    MalformedInputException,
+    NodeDoesntExistException,
+)
 
 CONFIGURATION_JSON = os.environ.get("TEST_CONFIGURATION_JSON")
 CLOUD_PROVIDER = os.environ.get("TEST_CLOUD_PROVIDER")
 USER_STORAGE = os.environ.get("TEST_USER_STORAGE")
 
 # FIXME: add tests depending on version
+
 
 @pytest.fixture(scope="module")
 def aws_connect():
@@ -31,6 +36,7 @@ def aws_connect():
         client.start()
         yield client
         client.stop()
+
 
 @pytest.mark.parametrize("client", ["aws_connect"])
 def test_set_data(client, request):
@@ -73,6 +79,7 @@ def test_set_data(client, request):
         pytest.fail(f"Unexpected FaaSKeeperException exception {e}")
     except Exception as e:
         pytest.fail(f"Unexpected general exception {e}")
+
 
 @pytest.mark.parametrize("client", ["aws_connect"])
 def test_set_data_async(client, request):
@@ -119,6 +126,7 @@ def test_set_data_async(client, request):
     except Exception as e:
         pytest.fail(f"Unexpected general exception {e}")
 
+
 @pytest.mark.parametrize("client", ["aws_connect"])
 def test_set_data_nonexistent(client, request):
 
@@ -127,6 +135,7 @@ def test_set_data_nonexistent(client, request):
     with pytest.raises(NodeDoesntExistException):
         client.set_data("/test_set_data_nonexisten", b"")
 
+
 @pytest.mark.parametrize("client", ["aws_connect"])
 def test_get_data_nonexistent(client, request):
 
@@ -134,6 +143,7 @@ def test_get_data_nonexistent(client, request):
 
     with pytest.raises(NodeDoesntExistException):
         client.get_data("/test_set_data_nonexisten")
+
 
 @pytest.mark.parametrize("client", ["aws_connect"])
 def test_set_data_malformed(client, request):
@@ -145,6 +155,7 @@ def test_set_data_malformed(client, request):
 
     with pytest.raises(MalformedInputException):
         client.set_data("/test_create/", b"")
+
 
 @pytest.mark.parametrize("client", ["aws_connect"])
 def test_get_data_malformed(client, request):
