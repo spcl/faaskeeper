@@ -27,6 +27,10 @@ class Storage(ABC):
         pass
 
     @abstractmethod
+    def unlock_node(self, path: str, timestamp: int):
+        pass
+
+    @abstractmethod
     def commit_node(self, node: Node, timestamp: int) -> bool:
         pass
 
@@ -93,6 +97,34 @@ class DynamoStorage(Storage):
             return (True, n)
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return (False, None)
+
+    def unlock_node(self, path: str, timestamp: int) -> bool:
+
+        """
+            We need to make sure that we're still the ones holding a timelock.
+            Then, we need to remove the timelock.
+
+            We don't perform any additional updates - just unlock.
+        """
+
+        # FIXME: move this to the interface of control driver
+        try:
+            self._state_storage._dynamodb.update_item(
+                TableName=self._state_storage.storage_name,
+                # path to the node
+                Key={"path": {"S": path}},
+                # remove timelock
+                UpdateExpression="REMOVE timelock",
+                # lock doesn't exist or it's already expired - just fail
+                ConditionExpression="(attribute_exists(timelock)) "
+                "and (timelock = :mytimelock)",
+                # timelock value
+                ExpressionAttributeValues={":mytimelock": {"N": str(timestamp)}},
+                ReturnConsumedCapacity="TOTAL",
+            )
+            return True
+        except self._state_storage.errorSupplier.ConditionalCheckFailedException:
+            return False
 
     def commit_node(self, node: Node, timestamp: int) -> bool:
 

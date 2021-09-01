@@ -76,6 +76,7 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
 
         # does the node exist?
         if node is not None:
+            config.system_storage.unlock_node(path, timestamp)
             return {"status": "failure", "path": path, "reason": "node_exists"}
 
         counter = config.system_storage.increase_system_counter(WRITER_ID)
@@ -89,8 +90,8 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
         node.created = Version(counter, None)
         node.modified = Version(counter, None)
         node.data = base64.b64decode(data)
-        config.system_storage.commit_node(node, timestamp)
         config.user_storage.write(node)
+        config.system_storage.commit_node(node, timestamp)
 
         # FIXME: version
         return {
@@ -155,6 +156,7 @@ def set_data(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]
 
         # does the node exist?
         if system_node is None:
+            config.system_storage.unlock_node(path, timestamp)
             return {"status": "failure", "path": path, "reason": "node_doesnt_exist"}
 
         counter = config.system_storage.increase_system_counter(WRITER_ID)
