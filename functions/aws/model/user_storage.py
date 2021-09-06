@@ -7,6 +7,7 @@ from typing import Set
 from faaskeeper.node import Node
 from functions.aws.control import DynamoStorage as DynamoDriver
 from functions.aws.control import S3Storage as S3Driver
+from functions.aws.control import RedisStorage as RedisDriver
 
 
 class OpResult(Enum):
@@ -95,7 +96,8 @@ class S3Storage:
         modified_system = node.modified.system.serialize()
         modified_epoch: Set[int] = set()
 
-        counters = [created_system, created_epoch, modified_system, modified_epoch]
+        counters = [created_system, created_epoch,
+                    modified_system, modified_epoch]
         total_length = reduce(lambda a, b: a + b, map(len, counters))
         return struct.pack(
             f"{5+total_length}I",
@@ -124,3 +126,38 @@ class S3Storage:
     @property
     def errorSupplier(self):
         return self._storage.errorSupplier
+
+    class RedisStorage(Storage):
+        def _serialize(self, node: Node) -> bytes:
+
+            created_system = node.created.system.serialize()
+            created_epoch: Set[int] = set()
+            modified_system = node.modified.system.serialize()
+            modified_epoch: Set[int] = set()
+
+            counters = [created_system, created_epoch,
+                        modified_system, modified_epoch]
+            total_length = reduce(lambda a, b: a + b, map(len, counters))
+            return struct.pack(
+                f"{5+total_length}I",
+                4 + total_length,
+                len(created_system),
+                *created_system,
+                len(created_epoch),
+                *created_epoch,
+                len(modified_system),
+                *modified_system,
+                len(modified_epoch),
+                *modified_epoch,
+            )
+
+    def __init__(self, cluster_name: str):
+        self._storage = RedisDriver(cluster_name)
+
+    def write(self, node: Node):
+        self._storage.write(node.path, self._serialize(node) + node.data)
+        return OpResult.SUCCESS
+
+    def update(self, node: Node):
+        self._storage.write(node.path, self._serialize(node) + node.data)
+        return OpResult.SUCCESS
