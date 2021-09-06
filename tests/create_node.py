@@ -8,6 +8,7 @@ from faaskeeper.config import Config
 from faaskeeper.exceptions import (
     FaaSKeeperException,
     MalformedInputException,
+    NodeDoesntExistException,
     NodeExistsException,
 )
 
@@ -108,6 +109,29 @@ def test_create_node_repeated(client, request):
 
     with pytest.raises(NodeExistsException):
         client.create("/test_create3", b"")
+
+
+@pytest.mark.parametrize("client", ["aws_connect"])
+def test_create_node_incorrect_parent(client, request):
+
+    client = request.getfixturevalue(client)
+
+    with pytest.raises(NodeDoesntExistException):
+        client.create("/test_create6/test_create", b"")
+
+
+@pytest.mark.parametrize("client", ["aws_connect"])
+def test_create_node_correct_parent(client, request):
+
+    client = request.getfixturevalue(client)
+
+    client.create("/test_create5", b"")
+    client.create("/test_create5/test_create", b"12")
+
+    read_node = client.get_data("/test_create5/test_create")
+    assert read_node
+    assert read_node.path == "/test_create5/test_create"
+    assert read_node.data == b"12"
 
 
 @pytest.mark.parametrize("client", ["aws_connect"])

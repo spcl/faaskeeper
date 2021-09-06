@@ -1,5 +1,6 @@
 import base64
 import json
+import pathlib
 import socket
 from datetime import datetime
 from time import sleep
@@ -79,6 +80,30 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
             config.system_storage.unlock_node(path, timestamp)
             return {"status": "failure", "path": path, "reason": "node_exists"}
 
+        # lock the parent - unless we're already at the root
+        node_path = pathlib.Path(path)
+        parent_path = node_path.parent.absolute()
+        parent_timestamp: Optional[int] = None
+        if str(parent_path) != "/":
+            while True:
+                parent_timestamp = int(datetime.now().timestamp())
+                parent_lock, parent_node = config.system_storage.lock_node(
+                    str(parent_path), parent_timestamp
+                )
+                if not lock:
+                    sleep(2)
+                else:
+                    break
+            # does the node does not exist?
+            if parent_node is None:
+                config.system_storage.unlock_node(str(parent_path), parent_timestamp)
+                config.system_storage.unlock_node(path, timestamp)
+                return {
+                    "status": "failure",
+                    "path": str(parent_path),
+                    "reason": "node_doesnt_exist",
+                }
+
         counter = config.system_storage.increase_system_counter(WRITER_ID)
         if counter is None:
             return {"status": "failure", "reason": "unknown"}
@@ -91,6 +116,11 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
         node.modified = Version(counter, None)
         node.data = base64.b64decode(data)
         config.user_storage.write(node)
+        # FIXME: make both operations concurrently
+        # unlock parent
+        if parent_timestamp is not None:
+            config.system_storage.unlock_node(str(parent_path), parent_timestamp)
+        # commit node
         config.system_storage.commit_node(node, timestamp)
 
         # FIXME: version
