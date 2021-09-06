@@ -130,8 +130,9 @@ resources:
         BucketName: ${self:provider.environment.S3_BUCKET}-data
 
 plugins:
-  - serverless-s3-remover
-  - serverless-python-requirements
+  # FIXME: ServerlessError: Serverless plugin not found.
+  # - serverless-s3-remover
+  # - serverless-python-requirements
 
 custom:
   remover:
