@@ -19,8 +19,9 @@ class S3Storage(Storage):
         pass
 
     def read(self, key: str):
+        print(key)
         obj = self._s3.get_object(Bucket=self.storage_name, Key=key)
-        return obj.get()["Body"].read()
+        return obj["Body"].read()
 
     def delete(self, key: str):
         """S3 delete"""

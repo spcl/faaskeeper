@@ -1,12 +1,12 @@
 import struct
 from abc import ABC, abstractmethod
 from enum import Enum
-from functools import reduce
 from typing import Set
 
 from boto3.dynamodb.types import TypeSerializer
 
 from faaskeeper.node import Node, NodeDataType
+from faaskeeper.providers.serialization import S3Reader
 from functions.aws.control import DynamoStorage as DynamoDriver
 from functions.aws.control import S3Storage as S3Driver
 
@@ -112,37 +112,22 @@ class DynamoStorage(Storage):
 
 
 class S3Storage:
-    def _serialize(self, node: Node) -> bytes:
-
-        created_system = node.created.system.serialize()
-        created_epoch: Set[int] = set()
-        modified_system = node.modified.system.serialize()
-        modified_epoch: Set[int] = set()
-
-        counters = [created_system, created_epoch, modified_system, modified_epoch]
-        total_length = reduce(lambda a, b: a + b, map(len, counters))
-        return struct.pack(
-            f"{5+total_length}I",
-            4 + total_length,
-            len(created_system),
-            *created_system,
-            len(created_epoch),
-            *created_epoch,
-            len(modified_system),
-            *modified_system,
-            len(modified_epoch),
-            *modified_epoch,
-        )
-
     def __init__(self, bucket_name: str):
         self._storage = S3Driver(bucket_name)
 
     def write(self, node: Node):
-        self._storage.write(node.path, self._serialize(node) + node.data)
+        self._storage.write(node.path, S3Reader.serialize(node))
         return OpResult.SUCCESS
 
     def update(self, node: Node, updates: Set[NodeDataType] = set()):
-        self._storage.write(node.path, self._serialize(node) + node.data)
+        # we need to download the data from storage
+        # FIXME: this should be in distributor
+        if not node.has_data:
+            # FIXME: add this to the library somehow
+            node_data = self._storage.read(node.path)
+            header_size = struct.unpack_from("I", node_data)[0]
+            node.data = node_data[header_size:]
+        self._storage.write(node.path, S3Reader.serialize(node))
         return OpResult.SUCCESS
 
     @property
