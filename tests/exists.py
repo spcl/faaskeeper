@@ -84,6 +84,7 @@ def test_exists_async(client, request):
     except Exception as e:
         pytest.fail(f"Unexpected general exception {e}")
 
+
 @pytest.mark.parametrize("client", ["aws_connect"])
 def test_exists_root(client, request):
 
@@ -91,6 +92,7 @@ def test_exists_root(client, request):
 
     read_node = client.exists("/")
     assert read_node is not None
+
 
 @pytest.mark.parametrize("client", ["aws_connect"])
 def test_exists_nonexistent(client, request):
