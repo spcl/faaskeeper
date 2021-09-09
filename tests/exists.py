@@ -46,7 +46,6 @@ def test_exists(client, request):
         client.create(path, b"10")
 
         read_node = client.exists(path)
-        print(read_node)
         assert read_node
         assert read_node.path == path
         # exists options doesn't return node data
