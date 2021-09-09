@@ -37,10 +37,12 @@ keywords = [
     "stat",
     "exists",
     "getEphemerals",
+    "getChildren"
 ]
 clientAPIMapping = {
     "create": "create",
     "get": "get_data",
+    "getChildren": "get_children",
     "set": "set_data",
     "exists": "exists",
     "close": "stop",
@@ -85,6 +87,9 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
         # special output handling
         if cmd == 'exists' and ret is None:
             print(f"Node {args[0]} does not exist")
+        elif isinstance(ret, list):
+            for node in ret:
+                click.echo(json.dumps(node.serialize()))
         else:
             click.echo(json.dumps(ret.serialize()))
     except (
