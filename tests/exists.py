@@ -46,6 +46,7 @@ def test_exists(client, request):
         client.create(path, b"10")
 
         read_node = client.exists(path)
+        print(read_node)
         assert read_node
         assert read_node.path == path
         # exists options doesn't return node data
@@ -84,6 +85,13 @@ def test_exists_async(client, request):
     except Exception as e:
         pytest.fail(f"Unexpected general exception {e}")
 
+@pytest.mark.parametrize("client", ["aws_connect"])
+def test_exists_root(client, request):
+
+    client = request.getfixturevalue(client)
+
+    read_node = client.exists("/")
+    assert read_node is not None
 
 @pytest.mark.parametrize("client", ["aws_connect"])
 def test_exists_nonexistent(client, request):
