@@ -35,12 +35,14 @@ keywords = [
     "ls",
     "set",
     "stat",
+    "exists",
     "getEphemerals",
 ]
 clientAPIMapping = {
     "create": "create",
     "get": "get_data",
     "set": "set_data",
+    "exists": "exists",
     "close": "stop",
     "connect": "start",
 }
@@ -79,7 +81,12 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
             converted_arguments.append(args[idx])
     try:
         ret = function(*converted_arguments)
-        click.echo(json.dumps(ret.serialize()))
+
+        # special output handling
+        if cmd == 'exists' and ret is None:
+            print(f"Node {args[0]} does not exist")
+        else:
+            click.echo(json.dumps(ret.serialize()))
     except (
         NodeExistsException,
         NodeDoesntExistException,
