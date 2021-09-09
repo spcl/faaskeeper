@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple
+from typing import Optional, Set, Tuple
 
-from faaskeeper.node import Node
+from boto3.dynamodb.types import TypeSerializer
+
+from faaskeeper.node import Node, NodeDataType
 from faaskeeper.version import SystemCounter, Version
 from functions.aws.control import DynamoStorage as DynamoDriver
 
@@ -31,7 +33,9 @@ class Storage(ABC):
         pass
 
     @abstractmethod
-    def commit_node(self, node: Node, timestamp: int) -> bool:
+    def commit_node(
+        self, node: Node, timestamp: int, updates: Set[NodeDataType] = set()
+    ) -> bool:
         pass
 
     @abstractmethod
@@ -47,6 +51,7 @@ class DynamoStorage(Storage):
     def __init__(self, storage_name: str):
         self._users_storage = DynamoDriver(f"{storage_name}-users", "user")
         self._state_storage = DynamoDriver(f"{storage_name}-state", "path")
+        self._type_serializer = TypeSerializer()
 
     def delete_user(self, session_id: str) -> bool:
         try:
@@ -99,6 +104,7 @@ class DynamoStorage(Storage):
             return (False, None)
 
     def unlock_node(self, path: str, timestamp: int) -> bool:
+        return self.commit_node(Node(path), timestamp)
 
         """
             We need to make sure that we're still the ones holding a timelock.
@@ -107,26 +113,28 @@ class DynamoStorage(Storage):
             We don't perform any additional updates - just unlock.
         """
 
-        # FIXME: move this to the interface of control driver
-        try:
-            self._state_storage._dynamodb.update_item(
-                TableName=self._state_storage.storage_name,
-                # path to the node
-                Key={"path": {"S": path}},
-                # remove timelock
-                UpdateExpression="REMOVE timelock",
-                # lock doesn't exist or it's already expired - just fail
-                ConditionExpression="(attribute_exists(timelock)) "
-                "and (timelock = :mytimelock)",
-                # timelock value
-                ExpressionAttributeValues={":mytimelock": {"N": str(timestamp)}},
-                ReturnConsumedCapacity="TOTAL",
-            )
-            return True
-        except self._state_storage.errorSupplier.ConditionalCheckFailedException:
-            return False
+        ## FIXME: move this to the interface of control driver
+        # try:
+        #    self._state_storage._dynamodb.update_item(
+        #        TableName=self._state_storage.storage_name,
+        #        # path to the node
+        #        Key={"path": {"S": path}},
+        #        # remove timelock
+        #        UpdateExpression="REMOVE timelock",
+        #        # lock doesn't exist or it's already expired - just fail
+        #        ConditionExpression="(attribute_exists(timelock)) "
+        #        "and (timelock = :mytimelock)",
+        #        # timelock value
+        #        ExpressionAttributeValues={":mytimelock": {"N": str(timestamp)}},
+        #        ReturnConsumedCapacity="TOTAL",
+        #    )
+        #    return True
+        # except self._state_storage.errorSupplier.ConditionalCheckFailedException:
+        #    return False
 
-    def commit_node(self, node: Node, timestamp: int) -> bool:
+    def commit_node(
+        self, node: Node, timestamp: int, updates: Set[NodeDataType] = set()
+    ) -> bool:
 
         """
             We need to make sure that we're still the ones holding a timelock.
@@ -138,14 +146,27 @@ class DynamoStorage(Storage):
 
         # FIXME: move this to the interface of control driver
         try:
-            update_expr = "REMOVE timelock SET mFxidSys = :modifiedStamp"
-            if node.has_created:
-                update_expr = f"{update_expr}, cFxidSys = :createdStamp"
+            # we always commit the modified stamp
+            update_expr = "REMOVE timelock "
+            if len(updates):
+                update_expr = f"{update_expr} SET "
+            update_values = {}
 
-            update_values = {":modifiedStamp": node.modified.system.version}
-            if node.has_created:
+            if NodeDataType.CREATED in updates:
+                update_expr = f"{update_expr} cFxidSys = :createdStamp,"
                 update_values[":createdStamp"] = node.created.system.version
+            if NodeDataType.MODIFIED in updates:
+                update_expr = f"{update_expr} mFxidSys = :modifiedStamp,"
+                update_values[":modifiedStamp"] = node.modified.system.version
+            if NodeDataType.CHILDREN in updates:
+                update_expr = f"{update_expr} children = :children,"
+                update_values[":children"] = self._type_serializer.serialize(
+                    node.children
+                )
+            # strip traling comma - boto3 will not accept that
+            update_expr = update_expr[:-1]
 
+            print(update_expr)
             self._state_storage._dynamodb.update_item(
                 TableName=self._state_storage.storage_name,
                 # path to the node

@@ -4,9 +4,9 @@ import pathlib
 import socket
 from datetime import datetime
 from time import sleep
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, cast
 
-from faaskeeper.node import Node
+from faaskeeper.node import Node, NodeDataType
 from faaskeeper.version import Version
 from functions.aws.config import Config
 
@@ -114,14 +114,24 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
         node = Node(path)
         node.created = Version(counter, None)
         node.modified = Version(counter, None)
+        node.children = []
         node.data = base64.b64decode(data)
         config.user_storage.write(node)
         # FIXME: make both operations concurrently
         # unlock parent
         if parent_timestamp is not None:
-            config.system_storage.unlock_node(str(parent_path), parent_timestamp)
+            # mypy complains about Optional, but we sort it out earlier
+            parent_node = cast(Node, parent_node)
+            parent_node.children.append(pathlib.Path(path).name)
+            config.system_storage.commit_node(
+                parent_node, parent_timestamp, set([NodeDataType.CHILDREN])
+            )
         # commit node
-        config.system_storage.commit_node(node, timestamp)
+        config.system_storage.commit_node(
+            node,
+            timestamp,
+            set([NodeDataType.CREATED, NodeDataType.MODIFIED, NodeDataType.CHILDREN]),
+        )
 
         # FIXME: version
         return {
