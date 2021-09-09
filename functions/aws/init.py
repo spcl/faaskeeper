@@ -1,5 +1,6 @@
 import boto3
 
+from faaskeeper.node import Node
 
 def init(service_name: str, region: str):
 
@@ -9,7 +10,19 @@ def init(service_name: str, region: str):
         TableName=f"{service_name}-state",
         Item={"path": {"S": "fxid"}, "cFxidSys": {"L": [{"N": "0"}]}},
     )
+
     # initialize root
+    dynamodb.put_item(
+        TableName=f"{service_name}-state",
+        Item={
+            "path": {"S": "/"},
+            "cFxidSys": {"L": [{"N": "0"}]},
+            "cFxidEpoch": {"NS": ["0"]},
+            "mFxidSys": {"L": [{"N": "0"}]},
+            "mFxidEpoch": {"NS": ["0"]},
+            "children": {"L": []}
+        },
+    )
     dynamodb.put_item(
         TableName=f"{service_name}-data",
         Item={
@@ -18,5 +31,7 @@ def init(service_name: str, region: str):
             "cFxidEpoch": {"NS": ["0"]},
             "mFxidSys": {"L": [{"N": "0"}]},
             "mFxidEpoch": {"NS": ["0"]},
+            "children": {"L": []}
         },
     )
+    # FIXME: iniitalize root for S3
