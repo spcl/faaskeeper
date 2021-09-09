@@ -10,7 +10,7 @@ class S3Storage(Storage):
         super().__init__(bucket_name)
         self._s3 = boto3.client("s3")
 
-    def write(self, key: str, data: Union[bytes, str]):
+    def write(self, key: str, data: Union[dict, bytes]):
         self._s3.put_object(Body=data, Bucket=self.storage_name, Key=key)
 
     def update(self, key: str, data: dict):

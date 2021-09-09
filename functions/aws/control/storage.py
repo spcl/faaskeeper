@@ -11,7 +11,7 @@ class Storage(ABC):
         return self._storage_name
 
     @abstractmethod
-    def write(self, key: str, data: Union[str, bytes]):
+    def write(self, key: str, data: Union[dict, bytes]):
         """
             Write object or set of values to the storage.
         """

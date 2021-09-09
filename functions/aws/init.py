@@ -9,3 +9,14 @@ def init(service_name: str, region: str):
         TableName=f"{service_name}-state",
         Item={"path": {"S": "fxid"}, "cFxidSys": {"L": [{"N": "0"}]}},
     )
+    # initialize root
+    dynamodb.put_item(
+        TableName=f"{service_name}-data",
+        Item={
+            "path": {"S": "/"},
+            "cFxidSys": {"L": [{"N": "0"}]},
+            "cFxidEpoch": {"NS": ["0"]},
+            "mFxidSys": {"L": [{"N": "0"}]},
+            "mFxidEpoch": {"NS": ["0"]},
+        },
+    )

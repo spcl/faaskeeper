@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Set, Tuple
 
-from boto3.dynamodb.types import TypeSerializer
+from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 
 from faaskeeper.node import Node, NodeDataType
 from faaskeeper.version import SystemCounter, Version
@@ -52,6 +52,7 @@ class DynamoStorage(Storage):
         self._users_storage = DynamoDriver(f"{storage_name}-users", "user")
         self._state_storage = DynamoDriver(f"{storage_name}-state", "path")
         self._type_serializer = TypeSerializer()
+        self._type_deserializer = TypeDeserializer()
 
     def delete_user(self, session_id: str) -> bool:
         try:
@@ -86,6 +87,7 @@ class DynamoStorage(Storage):
             # store raw provider data
             data = ret["Attributes"]
             n: Optional[Node] = None
+            # FIXME: merge with library code?
             # node already exists
             if "cFxidSys" in data:
                 n = Node(path)
@@ -99,38 +101,19 @@ class DynamoStorage(Storage):
                     None
                     # EpochCounter.from_provider_schema(data["mFxidEpoch"]),
                 )
+                n.children = self._type_deserializer.deserialize(data["children"])
             return (True, n)
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return (False, None)
 
     def unlock_node(self, path: str, timestamp: int) -> bool:
-        return self.commit_node(Node(path), timestamp)
-
         """
             We need to make sure that we're still the ones holding a timelock.
             Then, we need to remove the timelock.
 
             We don't perform any additional updates - just unlock.
         """
-
-        ## FIXME: move this to the interface of control driver
-        # try:
-        #    self._state_storage._dynamodb.update_item(
-        #        TableName=self._state_storage.storage_name,
-        #        # path to the node
-        #        Key={"path": {"S": path}},
-        #        # remove timelock
-        #        UpdateExpression="REMOVE timelock",
-        #        # lock doesn't exist or it's already expired - just fail
-        #        ConditionExpression="(attribute_exists(timelock)) "
-        #        "and (timelock = :mytimelock)",
-        #        # timelock value
-        #        ExpressionAttributeValues={":mytimelock": {"N": str(timestamp)}},
-        #        ReturnConsumedCapacity="TOTAL",
-        #    )
-        #    return True
-        # except self._state_storage.errorSupplier.ConditionalCheckFailedException:
-        #    return False
+        return self.commit_node(Node(path), timestamp)
 
     def commit_node(
         self, node: Node, timestamp: int, updates: Set[NodeDataType] = set()

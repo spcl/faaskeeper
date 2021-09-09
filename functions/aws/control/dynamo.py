@@ -1,9 +1,10 @@
 import base64
-from typing import Union
+from typing import Set, Union
 
 import boto3
+from boto3.dynamodb.types import TypeSerializer
 
-from faaskeeper.node import Node
+from faaskeeper.node import Node, NodeDataType
 
 from .storage import Storage
 
@@ -12,12 +13,12 @@ class DynamoStorage(Storage):
     def __init__(self, table_name: str, key_name: str):
         super().__init__(table_name)
         self._dynamodb = boto3.client("dynamodb")
+        self._type_serializer = TypeSerializer()
         self._key_name = key_name
 
-    def write(self, key: str, data: Union[bytes, str]):
+    def write(self, key: str, data: Union[dict, bytes]):
         """DynamoDb write"""
 
-        print(data)
         return self._dynamodb.put_item(
             TableName=self.storage_name,
             Item=data,
@@ -70,20 +71,43 @@ class DynamoStorage(Storage):
         }
         return schema
 
-    def update_node(self, node: Node):
+    def update_node(self, node: Node, updates: Set[NodeDataType]):
 
-        """
-            We update data and the modified counter.
-        """
+        update_expr = "SET "
+        schema: dict = {}
+        attribute_names = {"#P": "path"}
+        # FIXME: pass epoch counter value
+        if NodeDataType.DATA in updates:
+            schema[":data"] = {"B": node.data}
+            update_expr = f"{update_expr} #D = :data,"
+            attribute_names["#D"] = "data"
+        if NodeDataType.CREATED in updates:
+            schema = {
+                **schema,
+                ":cFxidSys": node.created.system.version,
+                ":cFxidEpoch": {"NS": ["0"]},
+            }
+            update_expr = f"{update_expr} cFxidSys = :createdStamp,"
+        if NodeDataType.MODIFIED in updates:
+            schema = {
+                **schema,
+                ":mFxidSys": node.modified.system.version,
+                ":mFxidEpoch": {"NS": ["0"]},
+            }
+            update_expr = f"{update_expr} mFxidSys = :modifiedStamp,"
+        if NodeDataType.CHILDREN in updates:
+            schema[":children"] = self._type_serializer.serialize(node.children)
+            update_expr = f"{update_expr} children = :children,"
+        # strip traling comma - boto3 will not accept that
+        update_expr = update_expr[:-1]
 
-        update_expr = "SET #D = :data, mFxidSys = :mFxidSys, mFxidEpoch = :mFxidEpoch"
         self._dynamodb.update_item(
             TableName=self.storage_name,
             Key={self._key_name: {"S": node.path}},
             ConditionExpression="attribute_exists(#P)",
             UpdateExpression=update_expr,
-            ExpressionAttributeNames={"#D": "data", "#P": "path"},
-            ExpressionAttributeValues=self._toSchema(node),
+            ExpressionAttributeNames=attribute_names,
+            ExpressionAttributeValues=schema,
             ReturnConsumedCapacity="TOTAL",
         )
 

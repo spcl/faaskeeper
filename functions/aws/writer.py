@@ -4,7 +4,7 @@ import pathlib
 import socket
 from datetime import datetime
 from time import sleep
-from typing import Callable, Dict, Optional, cast
+from typing import Callable, Dict, Optional
 
 from faaskeeper.node import Node, NodeDataType
 from faaskeeper.version import Version
@@ -84,31 +84,29 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
         node_path = pathlib.Path(path)
         parent_path = node_path.parent.absolute()
         parent_timestamp: Optional[int] = None
-        if str(parent_path) != "/":
-            while True:
-                parent_timestamp = int(datetime.now().timestamp())
-                parent_lock, parent_node = config.system_storage.lock_node(
-                    str(parent_path), parent_timestamp
-                )
-                if not lock:
-                    sleep(2)
-                else:
-                    break
-            # does the node does not exist?
-            if parent_node is None:
-                config.system_storage.unlock_node(str(parent_path), parent_timestamp)
-                config.system_storage.unlock_node(path, timestamp)
-                return {
-                    "status": "failure",
-                    "path": str(parent_path),
-                    "reason": "node_doesnt_exist",
-                }
+        while True:
+            parent_timestamp = int(datetime.now().timestamp())
+            parent_lock, parent_node = config.system_storage.lock_node(
+                str(parent_path), parent_timestamp
+            )
+            if not lock:
+                sleep(2)
+            else:
+                break
+        # does the node does not exist?
+        if parent_node is None:
+            config.system_storage.unlock_node(str(parent_path), parent_timestamp)
+            config.system_storage.unlock_node(path, timestamp)
+            return {
+                "status": "failure",
+                "path": str(parent_path),
+                "reason": "node_doesnt_exist",
+            }
 
         counter = config.system_storage.increase_system_counter(WRITER_ID)
         if counter is None:
             return {"status": "failure", "reason": "unknown"}
 
-        # FIXME: distributor
         # FIXME: epoch
         # store the created and the modified version counter
         node = Node(path)
@@ -116,22 +114,23 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
         node.modified = Version(counter, None)
         node.children = []
         node.data = base64.b64decode(data)
-        config.user_storage.write(node)
+
         # FIXME: make both operations concurrently
         # unlock parent
-        if parent_timestamp is not None:
-            # mypy complains about Optional, but we sort it out earlier
-            parent_node = cast(Node, parent_node)
-            parent_node.children.append(pathlib.Path(path).name)
-            config.system_storage.commit_node(
-                parent_node, parent_timestamp, set([NodeDataType.CHILDREN])
-            )
+        # parent now has one child more
+        parent_node.children.append(pathlib.Path(path).name)
+        config.system_storage.commit_node(
+            parent_node, parent_timestamp, set([NodeDataType.CHILDREN])
+        )
         # commit node
         config.system_storage.commit_node(
             node,
             timestamp,
             set([NodeDataType.CREATED, NodeDataType.MODIFIED, NodeDataType.CHILDREN]),
         )
+        # FIXME: distributor - make sure both have the same version
+        config.user_storage.write(node)
+        config.user_storage.update(parent_node, set([NodeDataType.CHILDREN]))
 
         # FIXME: version
         return {

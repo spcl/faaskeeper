@@ -4,7 +4,9 @@ from enum import Enum
 from functools import reduce
 from typing import Set
 
-from faaskeeper.node import Node
+from boto3.dynamodb.types import TypeSerializer
+
+from faaskeeper.node import Node, NodeDataType
 from functions.aws.control import DynamoStorage as DynamoDriver
 from functions.aws.control import S3Storage as S3Driver
 
@@ -27,7 +29,7 @@ class Storage(ABC):
         pass
 
     @abstractmethod
-    def update(self, node: Node):
+    def update(self, node: Node, updates: Set[NodeDataType] = set()):
         """
             Update existing object or set of values in the storage.
         """
@@ -47,37 +49,59 @@ class Storage(ABC):
 
 
 class DynamoStorage(Storage):
-    def _toSchema(self, node: Node):
+    def _toSchema(self, node: Node, updates: Set[NodeDataType] = set()):
+        schema: dict = {}
         # FIXME: pass epoch counter value
-        schema = {
-            "path": {"S": node.path},
-            "data": {"B": node.data},
-            "mFxidSys": node.modified.system.version,
-            "mFxidEpoch": {"NS": ["0"]},
-        }
-        if node.has_created:
+        if NodeDataType.DATA in updates:
+            schema = {**schema, "data": {"B": node.data}}
+        if NodeDataType.CREATED in updates:
             schema = {
                 **schema,
                 "cFxidSys": node.created.system.version,
                 "cFxidEpoch": {"NS": ["0"]},
             }
+        if NodeDataType.MODIFIED in updates:
+            schema = {
+                **schema,
+                "mFxidSys": node.modified.system.version,
+                "mFxidEpoch": {"NS": ["0"]},
+            }
+        if NodeDataType.CHILDREN in updates:
+            schema = {
+                **schema,
+                "children": self._type_serializer.serialize(node.children),
+            }
         return schema
 
     def __init__(self, table_name: str):
         self._storage = DynamoDriver(table_name, "path")
+        self._type_serializer = TypeSerializer()
 
     def write(self, node: Node):
         try:
             self._storage.write(
-                node.path, self._toSchema(node),
+                node.path,
+                {
+                    "path": {"S": node.path},
+                    **self._toSchema(
+                        node,
+                        set(
+                            [
+                                NodeDataType.CREATED,
+                                NodeDataType.MODIFIED,
+                                NodeDataType.CHILDREN,
+                            ]
+                        ),
+                    ),
+                },
             )
             return OpResult.SUCCESS
         except self.errorSupplier.ConditionalCheckFailedException:
             return OpResult.NODE_EXISTS
 
-    def update(self, node: Node):
+    def update(self, node: Node, updates: Set[NodeDataType] = set()):
         try:
-            self._storage.update_node(node)
+            self._storage.update_node(node, updates)
             return OpResult.SUCCESS
         except self.errorSupplier.ConditionalCheckFailedException:
             return OpResult.NODE_DOESNT_EXIST
@@ -117,7 +141,7 @@ class S3Storage:
         self._storage.write(node.path, self._serialize(node) + node.data)
         return OpResult.SUCCESS
 
-    def update(self, node: Node):
+    def update(self, node: Node, updates: Set[NodeDataType] = set()):
         self._storage.write(node.path, self._serialize(node) + node.data)
         return OpResult.SUCCESS
 
