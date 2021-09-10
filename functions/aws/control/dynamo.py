@@ -23,8 +23,8 @@ class DynamoStorage(Storage):
         ret = self._dynamodb.put_item(
             TableName=self.storage_name,
             Item=data,
-            #ExpressionAttributeNames={"#P": self._key_name},
-            #ConditionExpression="attribute_not_exists(#P)",
+            # ExpressionAttributeNames={"#P": self._key_name},
+            # ConditionExpression="attribute_not_exists(#P)",
             ReturnConsumedCapacity="TOTAL",
         )
         return ret
@@ -90,14 +90,14 @@ class DynamoStorage(Storage):
                 ":cFxidSys": node.created.system.version,
                 ":cFxidEpoch": {"NS": ["0"]},
             }
-            update_expr = f"{update_expr} cFxidSys = :createdStamp,"
+            update_expr = f"{update_expr} cFxidSys = :cFxidSys,"
         if NodeDataType.MODIFIED in updates:
             schema = {
                 **schema,
                 ":mFxidSys": node.modified.system.version,
                 ":mFxidEpoch": {"NS": ["0"]},
             }
-            update_expr = f"{update_expr} mFxidSys = :modifiedStamp,"
+            update_expr = f"{update_expr} mFxidSys = :mFxidSys,"
         if NodeDataType.CHILDREN in updates:
             schema[":children"] = self._type_serializer.serialize(node.children)
             update_expr = f"{update_expr} children = :children,"
