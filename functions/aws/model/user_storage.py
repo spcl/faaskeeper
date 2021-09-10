@@ -89,6 +89,7 @@ class DynamoStorage(Storage):
                             [
                                 NodeDataType.CREATED,
                                 NodeDataType.MODIFIED,
+                                NodeDataType.DATA,
                                 NodeDataType.CHILDREN,
                             ]
                         ),
