@@ -24,8 +24,7 @@ class S3Storage(Storage):
         return obj["Body"].read()
 
     def delete(self, key: str):
-        """S3 delete"""
-        self._s3.delete_object(Bucket=self.storage_name, Key=key).delete()
+        self._s3.delete_object(Bucket=self.storage_name, Key=key)
 
     @property
     def errorSupplier(self):
