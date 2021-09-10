@@ -19,13 +19,15 @@ class DynamoStorage(Storage):
     def write(self, key: str, data: Union[dict, bytes]):
         """DynamoDb write"""
 
-        return self._dynamodb.put_item(
+        # Completely replace the existing data
+        ret = self._dynamodb.put_item(
             TableName=self.storage_name,
             Item=data,
-            ExpressionAttributeNames={"#P": self._key_name},
-            ConditionExpression="attribute_not_exists(#P)",
+            #ExpressionAttributeNames={"#P": self._key_name},
+            #ConditionExpression="attribute_not_exists(#P)",
             ReturnConsumedCapacity="TOTAL",
         )
+        return ret
 
     def update(self, key: str, data: dict):
         """DynamoDb update"""
@@ -71,6 +73,7 @@ class DynamoStorage(Storage):
         }
         return schema
 
+    # FIXME: merge with exisitng serialization code
     def update_node(self, node: Node, updates: Set[NodeDataType]):
 
         update_expr = "SET "
