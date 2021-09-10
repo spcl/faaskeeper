@@ -35,12 +35,12 @@ class Storage(ABC):
         """
         pass
 
-    # @abstractmethod
-    # def delete(self, key: str):
-    #    """
-    #        Remove contents stored in the object/row in the storage.
-    #    """
-    #    pass
+    @abstractmethod
+    def delete(self, node: Node):
+        """
+           Remove contents stored in the object/row in the storage.
+        """
+        pass
 
     @property
     @abstractmethod
@@ -107,6 +107,9 @@ class DynamoStorage(Storage):
         except self.errorSupplier.ConditionalCheckFailedException:
             return OpResult.NODE_DOESNT_EXIST
 
+    def delete(self, node: Node):
+        self._storage.delete(node.path)
+
     @property
     def errorSupplier(self):
         return self._storage.errorSupplier
@@ -130,6 +133,9 @@ class S3Storage:
             node.data = node_data[header_size:]
         self._storage.write(node.path, S3Reader.serialize(node))
         return OpResult.SUCCESS
+
+    def delete(self, node: Node):
+        self._storage.delete(node.path)
 
     @property
     def errorSupplier(self):

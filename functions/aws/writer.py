@@ -236,7 +236,80 @@ def set_data(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]
 
 
 def delete_node(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]:
-    return None
+
+    # if not verify_event(id, write_event, verbose_output, ["flags"]):
+    #    return None
+
+    try:
+        # TODO: ephemeral
+        # TODO: sequential
+        path = get_object(write_event["path"])
+        if verbose_output:
+            print(f"Attempting to create node at {path}")
+
+        # FIXME :limit number of attempts
+        while True:
+            timestamp = int(datetime.now().timestamp())
+            lock, node = config.system_storage.lock_node(path, timestamp)
+            if not lock:
+                sleep(2)
+            else:
+                break
+
+        # does the node not exist?
+        if node is None:
+            config.system_storage.unlock_node(path, timestamp)
+            return {"status": "failure", "path": path, "reason": "node_doesnt_exist"}
+
+        if len(node.children):
+            config.system_storage.unlock_node(path, timestamp)
+            return {"status": "failure", "path": path, "reason": "not_empty"}
+
+        # lock the parent - unless we're already at the root
+        node_path = pathlib.Path(path)
+        parent_path = node_path.parent.absolute()
+        parent_timestamp: Optional[int] = None
+        while True:
+            parent_timestamp = int(datetime.now().timestamp())
+            parent_lock, parent_node = config.system_storage.lock_node(
+                str(parent_path), parent_timestamp
+            )
+            if not lock:
+                sleep(2)
+            else:
+                break
+        assert parent_node
+
+        counter = config.system_storage.increase_system_counter(WRITER_ID)
+        if counter is None:
+            return {"status": "failure", "reason": "unknown"}
+
+        # remove child from parent node
+        parent_node.children.remove(pathlib.Path(path).name)
+
+        # commit system storage
+        config.system_storage.commit_node(
+            parent_node, parent_timestamp, set([NodeDataType.CHILDREN])
+        )
+        config.system_storage.delete_node(node, timestamp)
+
+        # FIXME: distributor - make sure both have the same version
+        config.user_storage.delete(node)
+        config.user_storage.update(parent_node, set([NodeDataType.CHILDREN]))
+
+        # FIXME: version
+        return {
+            "status": "success",
+            "path": path,
+            "system_counter": node.created.system.serialize(),
+        }
+    except Exception:
+        # Report failure to the user
+        print("Failure!")
+        import traceback
+
+        traceback.print_exc()
+        return {"status": "failure", "reason": "unknown"}
 
 
 ops: Dict[str, Callable[[str, dict, bool], Optional[dict]]] = {

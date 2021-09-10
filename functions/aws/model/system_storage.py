@@ -33,6 +33,10 @@ class Storage(ABC):
         pass
 
     @abstractmethod
+    def delete_node(self, node: Node, timestamp: int):
+        pass
+
+    @abstractmethod
     def commit_node(
         self, node: Node, timestamp: int, updates: Set[NodeDataType] = set()
     ) -> bool:
@@ -149,7 +153,6 @@ class DynamoStorage(Storage):
             # strip traling comma - boto3 will not accept that
             update_expr = update_expr[:-1]
 
-            print(update_expr)
             self._state_storage._dynamodb.update_item(
                 TableName=self._state_storage.storage_name,
                 # path to the node
@@ -187,3 +190,17 @@ class DynamoStorage(Storage):
             return SystemCounter.from_provider_schema(ret["Attributes"]["cFxidSys"])
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return None
+
+    def delete_node(self, node: Node, timestamp: int):
+
+        self._state_storage._dynamodb.delete_item(
+            TableName=self._state_storage.storage_name,
+            # path to the node
+            Key={"path": {"S": node.path}},
+            # lock exists and it's ours
+            ConditionExpression="(attribute_exists(timelock)) "
+            "and (timelock = :mytimelock)",
+            # timelock value
+            ExpressionAttributeValues={":mytimelock": {"N": str(timestamp)}},
+            ReturnConsumedCapacity="TOTAL",
+        )

@@ -41,6 +41,7 @@ keywords = [
 ]
 clientAPIMapping = {
     "create": "create",
+    "delete": "delete",
     "get": "get_data",
     "getChildren": "get_children",
     "set": "set_data",
@@ -90,7 +91,7 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
         elif isinstance(ret, list):
             for node in ret:
                 click.echo(json.dumps(node.serialize()))
-        else:
+        elif ret is not None:
             click.echo(json.dumps(ret.serialize()))
     except (
         NodeExistsException,
