@@ -207,24 +207,24 @@ def set_data(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]
         # store only the new data and the modified version counter
 
         data = get_object(write_event["data"])
-        node = Node(path)
-        node.modified = Version(counter, None)
-        node.data = base64.b64decode(data)
+        system_node.modified = Version(counter, None)
+        system_node.data = base64.b64decode(data)
 
-        if not config.system_storage.commit_node(node, timestamp):
+        if not config.system_storage.commit_node(system_node, timestamp):
             return {"status": "failure", "reason": "unknown"}
 
         """
             On DynamoDB we skip updating the created version as it doesn't change.
             On S3, we need to write this every single time.
         """
-        node.created = Version(system_node.created.system, None)
-        config.user_storage.update(node)
+        config.user_storage.update(
+            system_node, set([NodeDataType.MODIFIED, NodeDataType.DATA])
+        )
 
         return {
             "status": "success",
             "path": path,
-            "modified_system_counter": node.modified.system.serialize(),
+            "modified_system_counter": system_node.modified.system.serialize(),
         }
     except Exception:
         # Report failure to the user
