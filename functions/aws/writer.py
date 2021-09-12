@@ -11,6 +11,7 @@ from faaskeeper.version import Version
 from functions.aws.config import Config
 from functions.aws.control.distributor_events import (
     DistributorCreateNode,
+    DistributorDeleteNode,
     DistributorSetData,
 )
 
@@ -312,16 +313,15 @@ def delete_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
         )
         config.system_storage.delete_node(node, timestamp)
 
-        # FIXME: distributor - make sure both have the same version
-        config.user_storage.delete(node)
-        config.user_storage.update(parent_node, set([NodeDataType.CHILDREN]))
-
-        # FIXME: version
-        return {
-            "status": "success",
-            "path": path,
-            "system_counter": node.created.system.serialize(),
-        }
+        assert config.distributor_queue
+        config.distributor_queue.push(
+            write_event["timestamp"],
+            write_event["sourceIP"],
+            write_event["sourcePort"],
+            counter,
+            DistributorDeleteNode(node, parent_node),
+        )
+        return None
     except Exception:
         # Report failure to the user
         print("Failure!")

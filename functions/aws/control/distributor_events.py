@@ -146,3 +146,55 @@ class DistributorSetData(DistributorEvent):
     @property
     def type(self) -> DistributorEventType:
         return DistributorEventType.SET_DATA
+
+
+class DistributorDeleteNode(DistributorEvent):
+
+    _type_deserializer = TypeDeserializer()
+
+    def __init__(self, node: Node, parent_node: Node):
+        self._node = node
+        self._parent_node = parent_node
+
+    def serialize(self, serializer) -> dict:
+        """We must use JSON.
+            IP and port are already serialized.
+        """
+        return {
+            "type": serializer.serialize(self.type.value),
+            "path": serializer.serialize(self.node.path),
+            "parent_path": serializer.serialize(self.parent.path),
+            "parent_children": serializer.serialize(self.parent.children),
+        }
+
+    @staticmethod
+    def deserialize(event_data: dict):
+
+        deserializer = DistributorCreateNode._type_deserializer
+        node = Node(deserializer.deserialize(event_data["path"]))
+
+        parent_node = Node(deserializer.deserialize(event_data["parent_path"]))
+        parent_node.children = deserializer.deserialize(event_data["parent_children"])
+
+        return DistributorDeleteNode(node, parent_node)
+
+    def execute(self, user_storage: UserStorage) -> Optional[dict]:
+
+        user_storage.delete(self.node)
+        user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
+        return {
+            "status": "success",
+            "path": self.node.path,
+        }
+
+    @property
+    def node(self) -> Node:
+        return self._node
+
+    @property
+    def parent(self) -> Node:
+        return self._parent_node
+
+    @property
+    def type(self) -> DistributorEventType:
+        return DistributorEventType.DELETE_NODE

@@ -1,15 +1,10 @@
-import base64
 import json
 import socket
-from datetime import datetime
-from time import sleep
-from typing import Callable, Dict, Optional
 
-from faaskeeper.node import Node, NodeDataType
-from faaskeeper.version import Version
 from functions.aws.config import Config
 from functions.aws.control.distributor_events import (
     DistributorCreateNode,
+    DistributorDeleteNode,
     DistributorEvent,
     DistributorEventType,
     DistributorSetData,
@@ -68,7 +63,8 @@ def handler(event: dict, context: dict):
 
     events = event["Records"]
     verbose_output = config.verbose
-    print(event)
+    if verbose_output:
+        print(event)
     processed_events = 0
     for record in events:
         if record["eventName"] == "INSERT":
@@ -82,6 +78,8 @@ def handler(event: dict, context: dict):
                 operation = DistributorCreateNode.deserialize(write_event)
             elif event_type == DistributorEventType.SET_DATA:
                 operation = DistributorSetData.deserialize(write_event)
+            elif event_type == DistributorEventType.DELETE_NODE:
+                operation = DistributorDeleteNode.deserialize(write_event)
             else:
                 raise NotImplementedError()
             try:
