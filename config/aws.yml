@@ -25,6 +25,9 @@ provider:
         - Fn::GetAtt:
             - stateTable
             - Arn
+        - Fn::GetAtt:
+            - distributeTable
+            - Arn
     - Effect: Allow
       Action:
         - s3:GetObject
@@ -59,6 +62,7 @@ functions:
       VERBOSE_LOGGING: ${env:FK_VERBOSE}
       USER_STORAGE: ${env:FK_USER_STORAGE}
       SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
+      DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
     events:
       - http:
           path: fk
@@ -71,6 +75,28 @@ functions:
           arn:
             Fn::GetAtt:
               - writerTable
+              - StreamArn
+  distributor:
+    handler: functions/aws/distributor.handler
+    environment:
+      VERBOSE: ${env:FK_VERBOSE}
+      DEPLOYMENT_NAME: ${env:FK_DEPLOYMENT_NAME}
+      VERBOSE_LOGGING: ${env:FK_VERBOSE}
+      USER_STORAGE: ${env:FK_USER_STORAGE}
+      SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
+      DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
+    events:
+      - http:
+          path: fk
+          method: POST
+      - stream:
+          type: dynamodb
+          batchSize: 1
+          startingPosition: LATEST
+          maximumRetryAttempts: 3
+          arn:
+            Fn::GetAtt:
+              - distributeTable
               - StreamArn
 
 resources:
@@ -85,17 +111,6 @@ resources:
             AttributeType: S
         KeySchema:
           - AttributeName: path
-            KeyType: HASH
-    usersTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: ${self:provider.environment.DYNAMODB_TABLE}-users
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: user
-            AttributeType: S
-        KeySchema:
-          - AttributeName: user
             KeyType: HASH
     dataTable:
       Type: AWS::DynamoDB::Table
@@ -125,6 +140,45 @@ resources:
             KeyType: RANGE
         StreamSpecification:
           StreamViewType: NEW_IMAGE
+    distributeTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}-distribute-queue
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: key
+            AttributeType: S
+          - AttributeName: timestamp
+            AttributeType: N
+        KeySchema:
+          - AttributeName: key
+            KeyType: HASH
+          - AttributeName: timestamp
+            KeyType: RANGE
+        StreamSpecification:
+          StreamViewType: NEW_IMAGE
+    usersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}-users
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: user
+            AttributeType: S
+        KeySchema:
+          - AttributeName: user
+            KeyType: HASH
+    watchTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}-watch
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: path
+            AttributeType: S
+        KeySchema:
+          - AttributeName: path
+            KeyType: HASH
     dataBucket:
       Type: AWS::S3::Bucket
       Properties:
