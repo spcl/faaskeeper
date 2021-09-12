@@ -56,7 +56,7 @@ WRITER_ID = 0
 def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]:
 
     if not verify_event(id, write_event, verbose_output, ["flags"]):
-        return None
+        return {"status": "failure", "reason": "incorrect_request"}
 
     try:
         # TODO: ephemeral
@@ -137,14 +137,21 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
         # base64-encoded data
         node.data = data
         assert config.distributor_queue
-        config.distributor_queue.push(counter, DistributorCreateNode(node, parent_node))
+        config.distributor_queue.push(
+            write_event["timestamp"],
+            write_event["sourceIP"],
+            write_event["sourcePort"],
+            counter,
+            DistributorCreateNode(node, parent_node),
+        )
 
+        return None
         # FIXME: version
-        return {
-            "status": "success",
-            "path": path,
-            "system_counter": node.created.system.serialize(),
-        }
+        # return {
+        #    "status": "success",
+        #    "path": path,
+        #    "system_counter": node.created.system.serialize(),
+        # }
     except Exception:
         # Report failure to the user
         print("Failure!")
@@ -185,6 +192,7 @@ def set_data(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]
     # FIXME: full conditional update
     if not verify_event(id, write_event, verbose_output):
         return None
+        return {"status": "failure", "reason": "incorrect_request"}
     try:
         path = get_object(write_event["path"])
         # version = get_object(write_event["version"])
@@ -374,10 +382,13 @@ def handler(event: dict, context: dict):
                 continue
 
             ret = ops[op](record["eventID"], write_event, verbose_output)
-            if not ret:
+            if ret:
+                if verbose_output:
+                    print(f"Failed processing write event {record['eventID']}")
+                # Failure - notify client
+                notify(write_event, ret)
                 continue
-            notify(write_event, ret)
-            print(ret)
-            processed_events += 1
+            else:
+                processed_events += 1
 
     print(f"Successfully processed {processed_events} records out of {len(events)}")

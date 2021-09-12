@@ -10,7 +10,14 @@ from .distributor_events import DistributorEvent
 
 class DistributorQueue(ABC):
     @abstractmethod
-    def push(self, counter: SystemCounter, event: DistributorEvent):
+    def push(
+        self,
+        user_timestamp: str,
+        ip: str,
+        port: str,
+        counter: SystemCounter,
+        event: DistributorEvent,
+    ):
         pass
 
 
@@ -19,7 +26,14 @@ class DistributorQueueDynamo(DistributorQueue):
         self._queue = DynamoDriver(f"{deployment_name}-distribute-queue", "key")
         self._type_serializer = TypeSerializer()
 
-    def push(self, counter: SystemCounter, event: DistributorEvent):
+    def push(
+        self,
+        user_timestamp: str,
+        ip: str,
+        port: str,
+        counter: SystemCounter,
+        event: DistributorEvent,
+    ):
         # FIXME: update interface
         """We must use a single shard - everything is serialized.
         """
@@ -36,6 +50,9 @@ class DistributorQueueDynamo(DistributorQueue):
             {
                 "key": self._type_serializer.serialize("faaskeeper"),
                 "timestamp": self._type_serializer.serialize(counter_val),
+                "sourceIP": ip,
+                "sourcePort": port,
+                "user_timestamp": user_timestamp,
                 **event.serialize(self._type_serializer),
             },
         )

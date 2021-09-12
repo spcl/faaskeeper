@@ -1,6 +1,7 @@
 import base64
 from abc import ABC, abstractmethod
 from enum import IntEnum
+from typing import Optional
 
 from boto3.dynamodb.types import TypeDeserializer
 
@@ -32,7 +33,7 @@ class DistributorEvent(ABC):
         pass
 
     @abstractmethod
-    def execute(self, user_storage: UserStorage):
+    def execute(self, user_storage: UserStorage) -> Optional[dict]:
         pass
 
 
@@ -46,6 +47,7 @@ class DistributorCreateNode(DistributorEvent):
 
     def serialize(self, serializer) -> dict:
         """We must use JSON.
+            IP and port are already serialized.
         """
         return {
             "type": serializer.serialize(self.type.value),
@@ -66,18 +68,21 @@ class DistributorCreateNode(DistributorEvent):
         node.modified = Version(counter, None)
         node.children = []
         node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
-        print(node)
 
         parent_node = Node(deserializer.deserialize(event_data["parent_path"]))
         parent_node.children = deserializer.deserialize(event_data["parent_children"])
-        print(parent_node)
 
         return DistributorCreateNode(node, parent_node)
 
-    def execute(self, user_storage: UserStorage):
+    def execute(self, user_storage: UserStorage) -> Optional[dict]:
 
         user_storage.write(self.node)
         user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
+        return {
+            "status": "success",
+            "path": self.node.path,
+            "system_counter": self.node.created.system.serialize(),
+        }
 
     @property
     def node(self) -> Node:

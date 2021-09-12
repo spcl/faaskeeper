@@ -50,12 +50,13 @@ def notify(write_event: dict, ret: dict):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
             s.settimeout(2)
+            print(write_event)
             source_ip = get_object(write_event["sourceIP"])
             source_port = int(get_object(write_event["sourcePort"]))
             s.connect((source_ip, source_port))
             s.sendall(
                 json.dumps(
-                    {**ret, "event": get_object(write_event["timestamp"])}
+                    {**ret, "event": get_object(write_event["user_timestamp"])}
                 ).encode()
             )
         except socket.timeout:
@@ -80,25 +81,19 @@ def handler(event: dict, context: dict):
                 operation = DistributorCreateNode.deserialize(write_event)
             else:
                 raise NotImplementedError()
-            operation.execute(config.user_storage)
-            # op = get_object(write_event["op"])
-            # if op not in ops:
-            #    if verbose_output:
-            #        print(
-            #            "Unknown operation {op} with ID {id}, "
-            #            "timestamp {timestamp}".format(
-            #                op=get_object(write_event["op"]),
-            #                id=record["eventID"],
-            #                timestamp=write_event["timestamp"],
-            #            )
-            #        )
-            #    continue
-
-            # ret = ops[op](record["eventID"], write_event, verbose_output)
-            # if not ret:
-            #    continue
-            # notify(write_event, ret)
-            # print(ret)
-            processed_events += 1
+            try:
+                ret = operation.execute(config.user_storage)
+                if ret:
+                    notify(write_event, ret)
+                    processed_events += 1
+                else:
+                    notify(
+                        write_event,
+                        {"status": "failure", "reason": "distributor failured"},
+                    )
+            except Exception:
+                notify(
+                    write_event, {"status": "failure", "reason": "distributor failured"}
+                )
 
     print(f"Successfully processed {processed_events} records out of {len(events)}")
