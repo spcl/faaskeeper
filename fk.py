@@ -93,7 +93,8 @@ def service(provider: str, config, clean: bool):
 
 @deploy.command()
 @common_params
-def functions(provider: str, config):
+@click.option("--function", type=str, default="")
+def functions(provider: str, config, function: str):
 
     config_json = json.load(config)
     env = {
@@ -110,11 +111,15 @@ def functions(provider: str, config):
     service_name = config_json["deployment-name"]
     logging.info(f"Deploy functions to service {service_name} at provider: {provider}")
 
-    # FIXME: more functions
-    execute(
-        f"sls deploy --stage {service_name} --function writer -c config/{provider}.yml",
-        env=env,
-    )
+    if function:
+        functions = [function]
+    else:
+        functions = ["writer", "distributor"]
+    for func in functions:
+        execute(
+            f"sls deploy --stage {service_name} --function {func} -c config/{provider}.yml",
+            env=env,
+        )
 
 
 @cli.group(invoke_without_command=True)

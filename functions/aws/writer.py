@@ -9,6 +9,7 @@ from typing import Callable, Dict, Optional
 from faaskeeper.node import Node, NodeDataType
 from faaskeeper.version import Version
 from functions.aws.config import Config
+from functions.aws.control.distributor_events import DistributorCreateNode
 
 mandatory_event_fields = [
     "op",
@@ -129,8 +130,14 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
             set([NodeDataType.CREATED, NodeDataType.MODIFIED, NodeDataType.CHILDREN]),
         )
         # FIXME: distributor - make sure both have the same version
-        config.user_storage.write(node)
-        config.user_storage.update(parent_node, set([NodeDataType.CHILDREN]))
+        # config.user_storage.write(node)
+        # config.user_storage.update(parent_node, set([NodeDataType.CHILDREN]))
+
+        # we propagate data to another queue, we should use the already
+        # base64-encoded data
+        node.data = data
+        assert config.distributor_queue
+        config.distributor_queue.push(counter, DistributorCreateNode(node, parent_node))
 
         # FIXME: version
         return {
@@ -332,6 +339,7 @@ def notify(write_event: dict, ret: dict):
             source_ip = get_object(write_event["sourceIP"])
             source_port = int(get_object(write_event["sourcePort"]))
             s.connect((source_ip, source_port))
+            print(f"Connected to {source_ip}:{source_port}")
             s.sendall(
                 json.dumps(
                     {**ret, "event": get_object(write_event["timestamp"])}

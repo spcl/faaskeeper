@@ -5,7 +5,7 @@ from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 
 from faaskeeper.node import Node, NodeDataType
 from faaskeeper.version import SystemCounter, Version
-from functions.aws.control import DynamoStorage as DynamoDriver
+from functions.aws.control.dynamo import DynamoStorage as DynamoDriver
 
 
 class Storage(ABC):

@@ -7,8 +7,8 @@ from boto3.dynamodb.types import TypeSerializer
 
 from faaskeeper.node import Node, NodeDataType
 from faaskeeper.providers.serialization import S3Reader
-from functions.aws.control import DynamoStorage as DynamoDriver
-from functions.aws.control import S3Storage as S3Driver
+from functions.aws.control.dynamo import DynamoStorage as DynamoDriver
+from functions.aws.control.s3 import S3Storage as S3Driver
 
 
 class OpResult(Enum):
@@ -115,7 +115,7 @@ class DynamoStorage(Storage):
         return self._storage.errorSupplier
 
 
-class S3Storage:
+class S3Storage(Storage):
     def __init__(self, bucket_name: str):
         self._storage = S3Driver(bucket_name)
 
