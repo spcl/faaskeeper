@@ -12,6 +12,7 @@ from functions.aws.control.distributor_events import (
     DistributorCreateNode,
     DistributorEvent,
     DistributorEventType,
+    DistributorSetData,
 )
 
 mandatory_event_fields = [
@@ -79,6 +80,8 @@ def handler(event: dict, context: dict):
             operation: DistributorEvent
             if event_type == DistributorEventType.CREATE_NODE:
                 operation = DistributorCreateNode.deserialize(write_event)
+            elif event_type == DistributorEventType.SET_DATA:
+                operation = DistributorSetData.deserialize(write_event)
             else:
                 raise NotImplementedError()
             try:

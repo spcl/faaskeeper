@@ -24,7 +24,7 @@ class DistributorEvent(ABC):
 
     @staticmethod
     @abstractmethod
-    def deserialize(event_data: dict) -> "DistributorEvent":
+    def deserialize(event_data: dict):
         pass
 
     @property
@@ -59,7 +59,7 @@ class DistributorCreateNode(DistributorEvent):
         }
 
     @staticmethod
-    def deserialize(event_data: dict) -> "DistributorCreateNode":
+    def deserialize(event_data: dict):
 
         deserializer = DistributorCreateNode._type_deserializer
         node = Node(deserializer.deserialize(event_data["path"]))
@@ -95,3 +95,54 @@ class DistributorCreateNode(DistributorEvent):
     @property
     def type(self) -> DistributorEventType:
         return DistributorEventType.CREATE_NODE
+
+
+class DistributorSetData(DistributorEvent):
+
+    _type_deserializer = TypeDeserializer()
+
+    def __init__(self, node: Node):
+        self._node = node
+
+    def serialize(self, serializer) -> dict:
+        """We must use JSON.
+            IP and port are already serialized.
+        """
+        return {
+            "type": serializer.serialize(self.type.value),
+            "path": serializer.serialize(self.node.path),
+            "counter": self.node.modified.system.version,
+            "data": serializer.serialize(self.node.data),
+        }
+
+    @staticmethod
+    def deserialize(event_data: dict):
+
+        deserializer = DistributorSetData._type_deserializer
+        node = Node(deserializer.deserialize(event_data["path"]))
+        counter = SystemCounter.from_provider_schema(event_data["counter"])
+        node.modified = Version(counter, None)
+        node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
+
+        return DistributorSetData(node)
+
+    def execute(self, user_storage: UserStorage) -> Optional[dict]:
+
+        """
+            On DynamoDB we skip updating the created version as it doesn't change.
+            On S3, we need to write this every single time.
+        """
+        user_storage.update(self.node, set([NodeDataType.MODIFIED, NodeDataType.DATA]))
+        return {
+            "status": "success",
+            "path": self.node.path,
+            "modified_system_counter": self.node.modified.system.serialize(),
+        }
+
+    @property
+    def node(self) -> Node:
+        return self._node
+
+    @property
+    def type(self) -> DistributorEventType:
+        return DistributorEventType.SET_DATA

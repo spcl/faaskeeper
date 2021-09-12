@@ -9,7 +9,10 @@ from typing import Callable, Dict, Optional
 from faaskeeper.node import Node, NodeDataType
 from faaskeeper.version import Version
 from functions.aws.config import Config
-from functions.aws.control.distributor_events import DistributorCreateNode
+from functions.aws.control.distributor_events import (
+    DistributorCreateNode,
+    DistributorSetData,
+)
 
 mandatory_event_fields = [
     "op",
@@ -228,19 +231,20 @@ def set_data(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]
         if not config.system_storage.commit_node(system_node, timestamp):
             return {"status": "failure", "reason": "unknown"}
 
-        """
-            On DynamoDB we skip updating the created version as it doesn't change.
-            On S3, we need to write this every single time.
-        """
-        config.user_storage.update(
-            system_node, set([NodeDataType.MODIFIED, NodeDataType.DATA])
+        # we propagate data to another queue, we should use the already
+        # base64-encoded data
+        system_node.data = data
+        assert config.distributor_queue
+        config.distributor_queue.push(
+            write_event["timestamp"],
+            write_event["sourceIP"],
+            write_event["sourcePort"],
+            counter,
+            DistributorSetData(system_node),
         )
 
-        return {
-            "status": "success",
-            "path": path,
-            "modified_system_counter": system_node.modified.system.serialize(),
-        }
+        return None
+
     except Exception:
         # Report failure to the user
         print("Failure!")
