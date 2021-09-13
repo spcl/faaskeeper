@@ -8,40 +8,6 @@ provider:
   environment:
     DYNAMODB_TABLE: ${self:service}-${opt:stage, self:provider.stage}
     S3_BUCKET:      ${self:service}-${opt:stage, self:provider.stage}
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - dynamodb:GetItem
-        - dynamodb:PutItem
-        - dynamodb:UpdateItem
-        - dynamodb:DeleteItem
-      Resource:
-        - Fn::GetAtt:
-            - dataTable
-            - Arn
-        - Fn::GetAtt:
-            - usersTable
-            - Arn
-        - Fn::GetAtt:
-            - stateTable
-            - Arn
-        - Fn::GetAtt:
-            - distributeTable
-            - Arn
-    - Effect: Allow
-      Action:
-        - s3:GetObject
-        - s3:GetObjectAcl
-        - s3:PutObject
-        - s3:PutObjectAcl
-        - s3:DeleteObject
-      Resource:
-        - Fn::Join:
-          - ""
-          - - Fn::GetAtt:
-                - dataBucket
-                - Arn
-            - "/*"
 
 package:
   # this is horribly broken
@@ -63,10 +29,27 @@ functions:
       USER_STORAGE: ${env:FK_USER_STORAGE}
       SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
       DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:GetItem
+          - dynamodb:PutItem
+          - dynamodb:UpdateItem
+          - dynamodb:DeleteItem
+        Resource:
+          - Fn::GetAtt:
+              - dataTable
+              - Arn
+          - Fn::GetAtt:
+              - usersTable
+              - Arn
+          - Fn::GetAtt:
+              - stateTable
+              - Arn
+          - Fn::GetAtt:
+              - distributeTable
+              - Arn
     events:
-      - http:
-          path: fk
-          method: POST
       - stream:
           type: dynamodb
           batchSize: 1
@@ -85,10 +68,42 @@ functions:
       USER_STORAGE: ${env:FK_USER_STORAGE}
       SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
       DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - lambda:InvokeFunction
+        Resource:
+          - Fn::GetAtt:
+              - WatchLambdaFunction
+              - Arn
+      - Effect: Allow
+        Action:
+          - dynamodb:GetItem
+          - dynamodb:PutItem
+          - dynamodb:UpdateItem
+          - dynamodb:DeleteItem
+        Resource:
+          - Fn::GetAtt:
+              - dataTable
+              - Arn
+          - Fn::GetAtt:
+              - distributeTable
+              - Arn
+      - Effect: Allow
+        Action:
+          - s3:GetObject
+          - s3:GetObjectAcl
+          - s3:PutObject
+          - s3:PutObjectAcl
+          - s3:DeleteObject
+        Resource:
+          - Fn::Join:
+            - ""
+            - - Fn::GetAtt:
+                  - dataBucket
+                  - Arn
+              - "/*"
     events:
-      - http:
-          path: fk
-          method: POST
       - stream:
           type: dynamodb
           batchSize: 1
@@ -98,6 +113,30 @@ functions:
             Fn::GetAtt:
               - distributeTable
               - StreamArn
+  watch:
+    handler: functions/aws/watch.handler
+    environment:
+      VERBOSE: ${env:FK_VERBOSE}
+      DEPLOYMENT_NAME: ${env:FK_DEPLOYMENT_NAME}
+      VERBOSE_LOGGING: ${env:FK_VERBOSE}
+      USER_STORAGE: ${env:FK_USER_STORAGE}
+      SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
+      DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:GetItem
+          - dynamodb:PutItem
+          - dynamodb:UpdateItem
+          - dynamodb:DeleteItem
+        Resource:
+          - Fn::GetAtt:
+              - watchTable
+              - Arn
+    events:
+      - http:
+          path: watch
+          method: POST
 
 resources:
   Resources:
@@ -187,6 +226,7 @@ resources:
 plugins:
   - serverless-s3-remover
   - serverless-python-requirements
+  - serverless-iam-roles-per-function
 
 custom:
   remover:
