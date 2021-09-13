@@ -93,8 +93,12 @@ def handler(event: dict, context: dict):
                         {"status": "failure", "reason": "distributor failured"},
                     )
             except Exception:
+                print("Failure!")
+                import traceback
+
+                traceback.print_exc()
                 notify(
-                    write_event, {"status": "failure", "reason": "distributor failured"}
+                    write_event, {"status": "failure", "reason": "distributor failure"}
                 )
 
     print(f"Successfully processed {processed_events} records out of {len(events)}")

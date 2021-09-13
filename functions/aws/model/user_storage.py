@@ -1,4 +1,3 @@
-import struct
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Set
@@ -125,12 +124,19 @@ class S3Storage(Storage):
 
     def update(self, node: Node, updates: Set[NodeDataType] = set()):
         # we need to download the data from storage
-        # FIXME: this should be in distributor
-        if not node.has_data:
-            # FIXME: add this to the library somehow
+        if not node.has_data or not node.has_children or not node.has_created:
             node_data = self._storage.read(node.path)
-            header_size = struct.unpack_from("I", node_data)[0]
-            node.data = node_data[header_size:]
+            read_node = S3Reader.deserialize(
+                node.path, node_data, not node.has_data, not node.has_children
+            )
+            if not node.has_data:
+                node.data = read_node.data
+            if not node.has_children:
+                node.children = read_node.children
+            if not node.has_created:
+                node.created = read_node.created
+            if not node.has_modified:
+                node.modified = read_node.modified
         self._storage.write(node.path, S3Reader.serialize(node))
         return OpResult.SUCCESS
 
