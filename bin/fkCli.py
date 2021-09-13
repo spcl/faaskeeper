@@ -56,7 +56,7 @@ fkCompleter = WordCompleter(keywords, ignore_case=True)
 
 def watch_callback(watch_event: WatchedEvent):
     click.echo(
-        f"WatchedEvent type: {watch_event.event_type} path: {watch_event.node.path}"
+        f"WatchedEvent type: {watch_event.event_type} path: {watch_event.path}"
     )
 
 
@@ -163,6 +163,8 @@ def cli(config, port: int, verbose: str):
     except Exception as e:
         click.echo("Unable to connect")
         click.echo(e)
+        import traceback
+        traceback.print_exc()
 
     while True:
         try:
