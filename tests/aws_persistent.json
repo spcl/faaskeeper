@@ -7,6 +7,6 @@
   "user-storage": "persistent",
   "system-storage": "key-value",
   "heartbeat-frequency": 12,
-  "worker-queue": "dynamodb",
-  "distributor-queue": "key-value"
+  "worker-queue": "key-value",
+  "distributor-queue": "dynamodb"
 }
