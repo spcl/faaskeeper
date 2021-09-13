@@ -66,39 +66,47 @@ def handler(event: dict, context: dict):
     if verbose_output:
         print(event)
     processed_events = 0
-    for record in events:
-        if record["eventName"] == "INSERT":
-            write_event = record["dynamodb"]["NewImage"]
-            print(write_event)
+    try:
+        for record in events:
+            if record["eventName"] == "INSERT":
+                write_event = record["dynamodb"]["NewImage"]
+                print(write_event)
 
-            # FIXME: hide under abstraction, boto3 deserialize
-            event_type = DistributorEventType(int(write_event["type"]["N"]))
-            operation: DistributorEvent
-            if event_type == DistributorEventType.CREATE_NODE:
-                operation = DistributorCreateNode.deserialize(write_event)
-            elif event_type == DistributorEventType.SET_DATA:
-                operation = DistributorSetData.deserialize(write_event)
-            elif event_type == DistributorEventType.DELETE_NODE:
-                operation = DistributorDeleteNode.deserialize(write_event)
-            else:
-                raise NotImplementedError()
-            try:
-                ret = operation.execute(config.user_storage)
-                if ret:
-                    notify(write_event, ret)
-                    processed_events += 1
+                # FIXME: hide under abstraction, boto3 deserialize
+                event_type = DistributorEventType(int(write_event["type"]["N"]))
+                print(event_type)
+                operation: DistributorEvent
+                if event_type == DistributorEventType.CREATE_NODE:
+                    operation = DistributorCreateNode.deserialize(write_event)
+                elif event_type == DistributorEventType.SET_DATA:
+                    operation = DistributorSetData.deserialize(write_event)
+                elif event_type == DistributorEventType.DELETE_NODE:
+                    operation = DistributorDeleteNode.deserialize(write_event)
                 else:
-                    notify(
-                        write_event,
-                        {"status": "failure", "reason": "distributor failured"},
-                    )
-            except Exception:
-                print("Failure!")
-                import traceback
+                    raise NotImplementedError()
+                try:
+                    ret = operation.execute(config.user_storage)
+                    print(ret)
+                    if ret:
+                        notify(write_event, ret)
+                        processed_events += 1
+                    else:
+                        notify(
+                            write_event,
+                            {"status": "failure", "reason": "distributor failured"},
+                        )
+                except Exception:
+                    print("Failure!")
+                    import traceback
 
-                traceback.print_exc()
-                notify(
-                    write_event, {"status": "failure", "reason": "distributor failure"}
-                )
+                    traceback.print_exc()
+                    notify(
+                        write_event, {"status": "failure", "reason": "distributor failure"}
+                    )
+    except Exception:
+        print("Failure!")
+        import traceback
+
+        traceback.print_exc()
 
     print(f"Successfully processed {processed_events} records out of {len(events)}")
