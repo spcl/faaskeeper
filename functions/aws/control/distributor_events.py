@@ -32,6 +32,11 @@ class DistributorEvent(ABC):
     def type(self) -> DistributorEventType:
         pass
 
+    @property
+    @abstractmethod
+    def node(self) -> Node:
+        pass
+
     @abstractmethod
     def execute(self, user_storage: UserStorage) -> Optional[dict]:
         pass

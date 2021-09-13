@@ -22,7 +22,7 @@ class Config:
 
     def __init__(self, with_distributor_queue: bool = True):
         self._verbose = bool(environ["VERBOSE"])
-        self._deployment_name = environ["DEPLOYMENT_NAME"]
+        self._deployment_name = f"faaskeeper-{environ['DEPLOYMENT_NAME']}"
 
         # configure user storage handle
         self._user_storage_type = {
@@ -32,11 +32,11 @@ class Config:
         self._user_storage: model.UserStorage
         if self._user_storage_type == Storage.PERSISTENT:
             self._user_storage = model.UserS3Storage(
-                bucket_name=f"faaskeeper-{self._deployment_name}-data"
+                bucket_name=f"{self._deployment_name}-data"
             )
         else:
             self._user_storage = model.UserDynamoStorage(
-                table_name=f"faaskeeper-{self._deployment_name}-data"
+                table_name=f"{self._deployment_name}-data"
             )
 
         # configure system storage handle
@@ -44,9 +44,7 @@ class Config:
             environ["SYSTEM_STORAGE"]
         )
         if self._system_storage_type == Storage.KEY_VALUE:
-            self._system_storage = model.SystemDynamoStorage(
-                f"faaskeeper-{self._deployment_name}"
-            )
+            self._system_storage = model.SystemDynamoStorage(f"{self._deployment_name}")
         else:
             raise RuntimeError("Not implemented!")
 
@@ -58,7 +56,7 @@ class Config:
             )
             if self._distributor_queue_type == QueueType.DYNAMODB:
                 self._distributor_queue = control.DistributorQueueDynamo(
-                    f"faaskeeper-{self._deployment_name}"
+                    f"{self._deployment_name}"
                 )
             else:
                 raise RuntimeError("Not implemented!")
