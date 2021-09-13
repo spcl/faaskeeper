@@ -51,9 +51,5 @@ def init(service_name: str, region: str):
     # FIXME: do it for every region
     dynamodb.put_item(
         TableName=f"{service_name}-watch",
-        Item={
-            "path": {"S": "epoch-counter"},
-            "counter": {"N": "0"},
-        },
+        Item={"path": {"S": "epoch-counter"}, "counter": {"N": "0"}},
     )
-
