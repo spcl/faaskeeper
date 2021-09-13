@@ -22,6 +22,7 @@ from faaskeeper.exceptions import (
     NodeExistsException,
     TimeoutException,
 )
+from faaskeeper.watch import WatchedEvent
 
 keywords = [
     "help",
@@ -37,7 +38,7 @@ keywords = [
     "stat",
     "exists",
     "getEphemerals",
-    "getChildren"
+    "getChildren",
 ]
 clientAPIMapping = {
     "create": "create",
@@ -51,6 +52,12 @@ clientAPIMapping = {
 }
 
 fkCompleter = WordCompleter(keywords, ignore_case=True)
+
+
+def watch_callback(watch_event: WatchedEvent):
+    click.echo(
+        f"WatchedEvent type: {watch_event.event_type} path: {watch_event.node.path}"
+    )
 
 
 def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
@@ -69,13 +76,27 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
     if params_count != len(args):
         msg = f"{cmd} arguments:"
         for param in sig.parameters.values():
-            msg += f" {param.name}:{param.annotation.__name__}"
+            # "watch" requires conversion - API uses a callback
+            # the CLI is a boolean switch if callback should be use or not
+            if param.name == "watch":
+                msg += f" watch:bool"
+            else:
+                msg += f" {param.name}:{param.annotation.__name__}"
         click.echo(msg)
         return client.session_status, client.session_id
 
     # convert arguments
     converted_arguments = []
     for idx, param in enumerate(sig.parameters.values()):
+        # "watch" requires conversion - API uses a callback
+        # the CLI is a boolean switch if callback should be use or not
+        if param.name == "watch":
+            if bool(args[idx]):
+                converted_arguments.append(watch_callback)
+            else:
+                converted_arguments.append(None)
+            continue
+
         if bytes == param.annotation:
             converted_arguments.append(args[idx].encode())
         elif bool == param.annotation:
@@ -86,7 +107,7 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
         ret = function(*converted_arguments)
 
         # special output handling
-        if cmd == 'exists' and ret is None:
+        if cmd == "exists" and ret is None:
             print(f"Node {args[0]} does not exist")
         elif isinstance(ret, list):
             for node in ret:
