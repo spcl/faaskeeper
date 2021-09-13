@@ -46,3 +46,14 @@ def init(service_name: str, region: str):
     node.children = []
     node.data = b""
     s3.write(node)
+
+    # initialize ephemeral counter
+    # FIXME: do it for every region
+    dynamodb.put_item(
+        TableName=f"{service_name}-watch",
+        Item={
+            "path": {"S": "epoch-counter"},
+            "counter": {"N": "0"},
+        },
+    )
+
