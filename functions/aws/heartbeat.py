@@ -1,40 +1,26 @@
+import json
 import os
+import socket
 from datetime import datetime
 
-import boto3
+from faaskeeper.watch import WatchEventType, WatchType
+from functions.aws.model.watches import Watches
 
-# from typing import Callable, Dict, Optional
-
-
-mandatory_event_fields = [
-    "op",
-    "path",
-    "user",
-    "version",
-    "flags",
-    "sourceIP",
-    "sourcePort",
-    "data",
-]
-dynamodb = boto3.client("dynamodb")
-table_name = os.environ["DYNAMODB_TABLE"]
+verbose = bool(os.environ["VERBOSE"])
+deployment_name = f"faaskeeper-{os.environ['DEPLOYMENT_NAME']}"
+region = os.environ["AWS_REGION"]
 
 
 def handler(event: dict, context: dict):
 
-    print(handler)
+    start = datetime.now()
+    if verbose:
+        print(f"Begin heartbeat at {start}")
 
-    print(f"{str(datetime.now())} Called heartbeat")
     try:
-        ret = dynamodb.scan(
-            TableName=f"{table_name}-state",
-            ConsistentRead=True,
-            ReturnConsumedCapacity="TOTAL",
-        )
-        print(ret)
-    except Exception as e:
-        print(e)
+        pass
+    except Exception:
+        print("Failure!")
+        import traceback
 
-
-if __name__ == "__main__":
-    handler({}, {})
+        traceback.print_exc()

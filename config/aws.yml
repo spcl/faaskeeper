@@ -137,6 +137,34 @@ functions:
       - http:
           path: watch
           method: POST
+  heartbeat:
+    handler: functions/aws/heartbeat.handler
+    environment:
+      VERBOSE: ${env:FK_VERBOSE}
+      DEPLOYMENT_NAME: ${env:FK_DEPLOYMENT_NAME}
+      VERBOSE_LOGGING: ${env:FK_VERBOSE}
+      USER_STORAGE: ${env:FK_USER_STORAGE}
+      SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
+      DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:GetItem
+          - dynamodb:PutItem
+          - dynamodb:UpdateItem
+          - dynamodb:DeleteItem
+        Resource:
+          - Fn::GetAtt:
+              - usersTable
+              - Arn
+    events:
+      - schedule:
+          name: heartbeat-schedule
+          rate: rate(1 minute)
+          enabled: false
+      - http:
+          path: watch
+          method: POST
 
 resources:
   Resources:

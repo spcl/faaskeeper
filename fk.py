@@ -114,7 +114,7 @@ def functions(provider: str, config, function: str):
     if function:
         functions = [function]
     else:
-        functions = ["writer", "distributor"]
+        functions = ["writer", "distributor", "watch", "heartbeat"]
     for func in functions:
         execute(
             f"sls deploy --stage {service_name} --function {func} -c config/{provider}.yml",
