@@ -2,7 +2,7 @@ import boto3
 
 import functions.aws.model as model
 from faaskeeper.node import Node
-from faaskeeper.version import SystemCounter, Version
+from faaskeeper.version import EpochCounter, SystemCounter, Version
 
 
 def init(service_name: str, region: str):
@@ -43,7 +43,9 @@ def init(service_name: str, region: str):
     s3 = model.UserS3Storage(bucket_name=f"{service_name}-data")
     node = Node("/")
     node.created = Version(SystemCounter.from_raw_data([0]), None)
-    node.modified = Version(SystemCounter.from_raw_data([0]), None)
+    node.modified = Version(
+        SystemCounter.from_raw_data([0]), EpochCounter.from_raw_data(set())
+    )
     node.children = []
     node.data = b""
     s3.write(node)
