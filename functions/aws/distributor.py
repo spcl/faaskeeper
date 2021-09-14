@@ -69,8 +69,8 @@ def launch_watcher(region: str, json_in: dict):
     print(ret)
 
 
-def query_watch_id(region: str, node_path: str):
-    return region_watches[region].get_watch_counters(node_path)
+# def query_watch_id(region: str, node_path: str):
+#    return region_watches[region].get_watch_counters(node_path)
 
 
 def notify(write_event: dict, ret: dict):

@@ -13,11 +13,11 @@ class Watches:
         self._type_deserializer = TypeDeserializer()
         self._counters = {
             WatchType.GET_DATA: "getData",
-            WatchType.CREATE_NODE: "createNode",
+            WatchType.EXISTS: "createNode",
             WatchType.GET_CHILDREN: "getChildrenID",
         }
 
-    def get_watches(self, node_path: str, counters: List[WatchEventType]) -> List[int]:
+    def get_watches(self, node_path: str, counters: List[WatchType]):
         try:
             # we always commit the modified stamp
             update_expr = "REMOVE "
@@ -31,13 +31,24 @@ class Watches:
                 Key={"path": {"S": node_path}},
                 # create timelock
                 UpdateExpression=update_expr,
-                ReturnValues="ALL_OLD",
+                ReturnValues="UPDATED_OLD",
                 ReturnConsumedCapacity="TOTAL",
             )
             # for c in self._counters:
             #    if c in ret["Item"]:
             #        counters.append(self._type_deserializer.deserialize(ret["Item"][c]))
 
-            return ret["Item"]
+            data = []
+            if "Attributes" in ret:
+                for c in counters:
+                    data.append(
+                        (
+                            c,
+                            self._type_deserializer.deserialize(
+                                ret["Attributes"][self._counters.get(c)]
+                            ),
+                        )
+                    )
+            return data
         except self._storage.errorSupplier.ResourceNotFoundException:
             return []
