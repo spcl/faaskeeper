@@ -62,6 +62,48 @@ bin/fkCli.py aws faaskeeper-dev
 [fk: aws:faaskeeper-dev(CONNECTED) session:f3c1ba70 0] create /root/test1 "test_data" false false
 ```
 
+## Design
+
+### Watches
+
+To register a watch, the client performs the following sequence of operations: read node, add
+watch in storage, read node again.
+If the node has not been update, then we have inserted
+the node correctly.
+This is guaranteed by the fact that system first updates the data, and then
+it sends watch notifications.
+If there's a concurrent update happening in the background, then
+interleaving between update and watch setting can happen.
+If the client manages to add notification before the update, it will be notified.
+However, if the data is updated, then client has no guarantee that it managed
+to create watch before watch function started delivering notifications - thus, watch creation failed.
+The watch might have been created correctly, but this case is managed by adding
+timestamps to let `watch` function detect when the watch is new enough that
+it shouldn't be trigerred.
+Bad interleaving - entire watch process happens between system writing data
+and starting notifications. The system should not trigger the watch and
+retain them for future usage.
+
+#### GetData
+
+The watch is triggered by `set_data` and `delete` operations on the node.
+To detect if the watch is not set on an older version of the node, the timestamp
+is compared.
+
+#### Exists
+
+The watch is triggered by `create`, `set_data`, and `delete` call on the node.
+To detect if the watch is not set on an older version of the node, the timestamp
+is compared.
+When the node does not exist, a "none" timestamp is set - such watch is
+retained when the update was `delete` and triggered when the update was `create`.
+
+#### GetChildren
+
+Triggered by delete on the node and `create` and `delete` on its children.
+To detect if the watch is not set on an older version of the node, we
+use the `children` timestamp.
+
 ## Development
 
 We use `black` and `flake8` for code linting. Before commiting and pushing changes,
