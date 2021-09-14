@@ -95,9 +95,19 @@ class DynamoStorage(Storage):
             schema = {
                 **schema,
                 ":mFxidSys": node.modified.system.version,
-                # ":mFxidEpoch": {"NS": ["0"]},
             }
-            update_expr = f"{update_expr} mFxidSys = :mFxidSys,"
+            if node.modified.epoch:
+                # FIXME: hide under abstraction
+                assert node.modified.epoch.version
+                counters = list(node.modified.epoch.version)
+                if len(counters) == 0:
+                    counters = [""]
+                schema = {**schema, ":mFxidEpoch": {"SS": counters}}
+            else:
+                schema = {**schema, ":mFxidEpoch": {"SS": [""]}}
+            update_expr = (
+                f"{update_expr} mFxidSys = :mFxidSys, mFxidEpoch = :mFxidEpoch,"
+            )
         if NodeDataType.CHILDREN in updates:
             schema[":children"] = self._type_serializer.serialize(node.children)
             update_expr = f"{update_expr} children = :children,"

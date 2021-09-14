@@ -2,7 +2,7 @@ import hashlib
 import json
 import socket
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List
+from typing import Dict, Set
 
 import boto3
 
@@ -41,13 +41,14 @@ config = Config.instance(False)
 
 # FIXME: configure
 regions = ["us-east-1"]
+verbose_output = config.verbose
 region_clients = {}
 region_watches = {}
-epoch_counters: Dict[str, List[str]] = {}
+epoch_counters: Dict[str, Set[str]] = {}
 for r in regions:
     region_clients[r] = boto3.client("lambda", region_name=r)
     region_watches[r] = Watches(config.deployment_name, r)
-    epoch_counters[r] = []
+    epoch_counters[r] = set()
 executor = ThreadPoolExecutor(max_workers=2 * len(regions))
 
 
@@ -61,12 +62,12 @@ def launch_watcher(region: str, json_in: dict):
     (2) Wait for completion
     (3) Remove ephemeral counter.
     """
-    ret = region_clients[region].invoke(
+    # FIXME process result
+    region_clients[region].invoke(
         FunctionName=f"{config.deployment_name}-watch",
         InvocationType="RequestResponse",
         Payload=json.dumps(json_in).encode(),
     )
-    print(ret)
 
 
 # def query_watch_id(region: str, node_path: str):
@@ -78,7 +79,8 @@ def notify(write_event: dict, ret: dict):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
             s.settimeout(2)
-            print(write_event)
+            if verbose_output:
+                print("Notification", write_event)
             source_ip = get_object(write_event["sourceIP"])
             source_port = int(get_object(write_event["sourcePort"]))
             s.connect((source_ip, source_port))
@@ -94,7 +96,6 @@ def notify(write_event: dict, ret: dict):
 def handler(event: dict, context: dict):
 
     events = event["Records"]
-    verbose_output = config.verbose
     if verbose_output:
         print(event)
     processed_events = 0
@@ -105,11 +106,9 @@ def handler(event: dict, context: dict):
                 continue
 
             write_event = record["dynamodb"]["NewImage"]
-            print(write_event)
 
             # FIXME: hide under abstraction, boto3 deserialize
             event_type = DistributorEventType(int(write_event["type"]["N"]))
-            print(event_type)
             operation: DistributorEvent
             counters = []
             watches = {}
@@ -133,17 +132,20 @@ def handler(event: dict, context: dict):
                 raise NotImplementedError()
             try:
                 # write new data
-                ret = operation.execute(config.user_storage)
-                print(ret, watches)
+                for r in regions:
+                    if verbose_output:
+                        print("Apply op", watches, epoch_counters[r])
+                    ret = operation.execute(config.user_storage, epoch_counters[r])
                 # start watch delivery
                 for r in regions:
                     if event_type == DistributorEventType.SET_DATA:
-                        print("submit", watches)
                         watches_submitters.append(
                             executor.submit(launch_watcher, r, watches)
                         )
                 for r in regions:
-                    epoch_counters[r].extend(counters)
+                    epoch_counters[r].update(counters)
+                    if verbose_output:
+                        print("Applied op", epoch_counters[r])
                 if ret:
                     # notify client about success
                     notify(write_event, ret)

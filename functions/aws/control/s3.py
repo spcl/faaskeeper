@@ -19,7 +19,6 @@ class S3Storage(Storage):
         pass
 
     def read(self, key: str):
-        print(key)
         obj = self._s3.get_object(Bucket=self.storage_name, Key=key)
         return obj["Body"].read()
 

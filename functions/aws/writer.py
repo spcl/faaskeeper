@@ -365,12 +365,12 @@ def handler(event: dict, context: dict):
 
     events = event["Records"]
     verbose_output = config.verbose
-    print(event)
     processed_events = 0
     for record in events:
         if record["eventName"] == "INSERT":
             write_event = record["dynamodb"]["NewImage"]
-            print(write_event)
+            if verbose_output:
+                print(write_event)
 
             op = get_object(write_event["op"])
             if op not in ops:

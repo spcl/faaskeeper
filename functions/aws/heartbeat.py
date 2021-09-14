@@ -1,10 +1,5 @@
-import json
 import os
-import socket
 from datetime import datetime
-
-from faaskeeper.watch import WatchEventType, WatchType
-from functions.aws.model.watches import Watches
 
 verbose = bool(os.environ["VERBOSE"])
 deployment_name = f"faaskeeper-{os.environ['DEPLOYMENT_NAME']}"

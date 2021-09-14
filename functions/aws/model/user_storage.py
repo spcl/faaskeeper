@@ -57,14 +57,16 @@ class DynamoStorage(Storage):
             schema = {
                 **schema,
                 "cFxidSys": node.created.system.version,
-                "cFxidEpoch": {"NS": ["0"]},
             }
         if NodeDataType.MODIFIED in updates:
             schema = {
                 **schema,
                 "mFxidSys": node.modified.system.version,
-                "mFxidEpoch": {"NS": ["0"]},
             }
+            if node.modified.epoch:
+                schema = {**schema, "mFxidEpoch": {"SS": node.modified.epoch.version}}
+            else:
+                schema = {**schema, "mFxidEpoch": {"SS": [""]}}
         if NodeDataType.CHILDREN in updates:
             schema = {
                 **schema,

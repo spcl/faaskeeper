@@ -1,28 +1,12 @@
-import json
 import os
-import socket
 
 from faaskeeper.watch import WatchEventType, WatchType
 from functions.aws.model.watches import Watches
+from functions.aws.notify import notify
 
 
 def get_object(obj: dict):
     return next(iter(obj.values()))
-
-
-def notify(ip: str, port: int, path: str, event: WatchEventType, timestamp: str):
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        try:
-            s.settimeout(2)
-            s.connect((ip, port))
-            s.sendall(
-                json.dumps(
-                    {"watch-event": event.value, "timestamp": timestamp, "path": path}
-                ).encode()
-            )
-        except socket.timeout:
-            print(f"Notification of client {ip}:{port} failed!")
 
 
 verbose = bool(os.environ["VERBOSE"])
@@ -56,14 +40,15 @@ def handler(event: dict, context: dict):
                         notify(
                             client_ip,
                             client_port,
-                            path,
-                            WatchEventType.NODE_DATA_CHANGED,
-                            timestamp,
+                            {
+                                "watch-event": WatchEventType.NODE_DATA_CHANGED.value,
+                                "timestamp": timestamp,
+                                "path": path,
+                            },
                         )
                         # FIXME: actual notification
         else:
             raise NotImplementedError()
-        print(watches)
     except Exception:
         print("Failure!")
         import traceback

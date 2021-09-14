@@ -20,9 +20,10 @@ def init(service_name: str, region: str):
         Item={
             "path": {"S": "/"},
             "cFxidSys": {"L": [{"N": "0"}]},
-            "cFxidEpoch": {"NS": ["0"]},
+            # "cFxidEpoch": {"SS": ["0"]},
             "mFxidSys": {"L": [{"N": "0"}]},
-            "mFxidEpoch": {"NS": ["0"]},
+            "pFxidSys": {"L": [{"N": "0"}]},
+            # "mFxidEpoch": {"NS": ["0"]},
             "children": {"L": []},
         },
     )
@@ -31,9 +32,9 @@ def init(service_name: str, region: str):
         Item={
             "path": {"S": "/"},
             "cFxidSys": {"L": [{"N": "0"}]},
-            "cFxidEpoch": {"NS": ["0"]},
+            # "cFxidEpoch": {"NS": ["0"]},
             "mFxidSys": {"L": [{"N": "0"}]},
-            "mFxidEpoch": {"NS": ["0"]},
+            "mFxidEpoch": {"SS": [""]},
             "children": {"L": []},
         },
     )
@@ -49,7 +50,7 @@ def init(service_name: str, region: str):
 
     # initialize ephemeral counter
     # FIXME: do it for every region
-    dynamodb.put_item(
-        TableName=f"{service_name}-watch",
-        Item={"path": {"S": "epoch-counter"}, "counter": {"N": "0"}},
-    )
+    # dynamodb.put_item(
+    #    TableName=f"{service_name}-watch",
+    #    Item={"path": {"S": "epoch-counter"}, "counter": {"N": "0"}},
+    # )

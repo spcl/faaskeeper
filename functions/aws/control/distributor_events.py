@@ -1,12 +1,12 @@
 import base64
 from abc import ABC, abstractmethod
 from enum import IntEnum
-from typing import Optional
+from typing import Optional, Set
 
 from boto3.dynamodb.types import TypeDeserializer
 
 from faaskeeper.node import Node, NodeDataType
-from faaskeeper.version import SystemCounter, Version
+from faaskeeper.version import EpochCounter, SystemCounter, Version
 
 from ..model.user_storage import Storage as UserStorage
 
@@ -38,7 +38,9 @@ class DistributorEvent(ABC):
         pass
 
     @abstractmethod
-    def execute(self, user_storage: UserStorage) -> Optional[dict]:
+    def execute(
+        self, user_storage: UserStorage, epoch_counters: Set[str]
+    ) -> Optional[dict]:
         pass
 
 
@@ -79,8 +81,10 @@ class DistributorCreateNode(DistributorEvent):
 
         return DistributorCreateNode(node, parent_node)
 
-    def execute(self, user_storage: UserStorage) -> Optional[dict]:
-
+    def execute(
+        self, user_storage: UserStorage, epoch_counters: Set[str]
+    ) -> Optional[dict]:
+        # FIXME: Update
         user_storage.write(self.node)
         user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
         return {
@@ -131,12 +135,15 @@ class DistributorSetData(DistributorEvent):
 
         return DistributorSetData(node)
 
-    def execute(self, user_storage: UserStorage) -> Optional[dict]:
-
+    def execute(
+        self, user_storage: UserStorage, epoch_counters: Set[str]
+    ) -> Optional[dict]:
+        # FIXME: update
         """
             On DynamoDB we skip updating the created version as it doesn't change.
             On S3, we need to write this every single time.
         """
+        self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.node, set([NodeDataType.MODIFIED, NodeDataType.DATA]))
         return {
             "status": "success",
@@ -183,8 +190,11 @@ class DistributorDeleteNode(DistributorEvent):
 
         return DistributorDeleteNode(node, parent_node)
 
-    def execute(self, user_storage: UserStorage) -> Optional[dict]:
+    def execute(
+        self, user_storage: UserStorage, epoch_counters: Set[str]
+    ) -> Optional[dict]:
 
+        # FIXME: update
         user_storage.delete(self.node)
         user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
         return {
