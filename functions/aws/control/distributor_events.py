@@ -56,6 +56,7 @@ class DistributorCreateNode(DistributorEvent):
         """We must use JSON.
             IP and port are already serialized.
         """
+
         return {
             "type": serializer.serialize(self.type.value),
             "path": serializer.serialize(self.node.path),
@@ -85,7 +86,10 @@ class DistributorCreateNode(DistributorEvent):
         self, user_storage: UserStorage, epoch_counters: Set[str]
     ) -> Optional[dict]:
         # FIXME: Update
+        self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.write(self.node)
+        # FIXME: update parent epoch and pxid
+        # self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
         return {
             "status": "success",
@@ -195,7 +199,10 @@ class DistributorDeleteNode(DistributorEvent):
     ) -> Optional[dict]:
 
         # FIXME: update
+        # FIXME: retain the node to keep counters
+        # self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.delete(self.node)
+        # self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
         return {
             "status": "success",

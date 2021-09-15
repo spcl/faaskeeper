@@ -140,6 +140,7 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
         # we propagate data to another queue, we should use the already
         # base64-encoded data
         node.data = data
+
         assert config.distributor_queue
         config.distributor_queue.push(
             write_event["timestamp"],
@@ -369,8 +370,8 @@ def handler(event: dict, context: dict):
     for record in events:
         if record["eventName"] == "INSERT":
             write_event = record["dynamodb"]["NewImage"]
-            if verbose_output:
-                print(write_event)
+            # if verbose_output:
+            #    print(write_event)
 
             op = get_object(write_event["op"])
             if op not in ops:

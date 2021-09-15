@@ -64,7 +64,10 @@ class DynamoStorage(Storage):
                 "mFxidSys": node.modified.system.version,
             }
             if node.modified.epoch:
-                schema = {**schema, "mFxidEpoch": {"SS": node.modified.epoch.version}}
+                data = list(node.modified.epoch.version)
+                if len(data) == 0:
+                    data.append("")
+                schema = {**schema, "mFxidEpoch": {"SS": data}}
             else:
                 schema = {**schema, "mFxidEpoch": {"SS": [""]}}
         if NodeDataType.CHILDREN in updates:
