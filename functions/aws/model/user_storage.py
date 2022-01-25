@@ -64,6 +64,7 @@ class DynamoStorage(Storage):
                 "mFxidSys": node.modified.system.version,
             }
             if node.modified.epoch:
+                assert node.modified.epoch.version is not None
                 data = list(node.modified.epoch.version)
                 if len(data) == 0:
                     data.append("")

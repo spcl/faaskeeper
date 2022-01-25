@@ -6,6 +6,7 @@ from typing import Dict, Set
 
 import boto3
 
+from faaskeeper.stats import StorageStatistics
 from faaskeeper.watch import WatchEventType
 from functions.aws.config import Config
 from functions.aws.control.distributor_events import (
@@ -41,7 +42,8 @@ config = Config.instance(False)
 
 # FIXME: configure
 regions = ["us-east-1"]
-verbose_output = config.verbose
+# verbose_output = config.verbose
+verbose_output = False
 region_clients = {}
 region_watches = {}
 epoch_counters: Dict[str, Set[str]] = {}
@@ -93,12 +95,13 @@ def notify(write_event: dict, ret: dict):
             print(f"Notification of client {source_ip}:{source_port} failed!")
 
 
-def handler(event: dict, context: dict):
+def handler(event: dict, context):
 
     events = event["Records"]
     if verbose_output:
         print(event)
     processed_events = 0
+    StorageStatistics.instance().reset()
     try:
         watches_submitters = []
         for record in events:
@@ -171,4 +174,9 @@ def handler(event: dict, context: dict):
 
         traceback.print_exc()
 
-    print(f"Successfully processed {processed_events} records out of {len(events)}")
+    # print(f"Successfully processed {processed_events} records out of {len(events)}")
+    print(
+        f"Request: {context.aws_request_id} "
+        f"Read: {StorageStatistics.instance().read_units}\t"
+        f"Write: {StorageStatistics.instance().write_units}"
+    )

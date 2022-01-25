@@ -7,6 +7,7 @@ from time import sleep
 from typing import Callable, Dict, Optional
 
 from faaskeeper.node import Node, NodeDataType
+from faaskeeper.stats import StorageStatistics
 from faaskeeper.version import Version
 from functions.aws.config import Config
 from functions.aws.control.distributor_events import (
@@ -362,11 +363,12 @@ def notify(write_event: dict, ret: dict):
             print(f"Notification of client {source_ip}:{source_port} failed!")
 
 
-def handler(event: dict, context: dict):
+def handler(event: dict, context):
 
     events = event["Records"]
     verbose_output = config.verbose
     processed_events = 0
+    StorageStatistics.instance().reset()
     for record in events:
         if record["eventName"] == "INSERT":
             write_event = record["dynamodb"]["NewImage"]
@@ -396,4 +398,9 @@ def handler(event: dict, context: dict):
             else:
                 processed_events += 1
 
-    print(f"Successfully processed {processed_events} records out of {len(events)}")
+    # print(f"Successfully processed {processed_events} records out of {len(events)}")
+    print(
+        f"Request: {context.aws_request_id} "
+        f"Read: {StorageStatistics.instance().read_units}\t"
+        f"Write: {StorageStatistics.instance().write_units}"
+    )

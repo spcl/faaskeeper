@@ -5,6 +5,7 @@ import boto3
 from boto3.dynamodb.types import TypeSerializer
 
 from faaskeeper.node import Node, NodeDataType
+from faaskeeper.stats import StorageStatistics
 
 from .storage import Storage
 
@@ -27,6 +28,10 @@ class DynamoStorage(Storage):
             # ConditionExpression="attribute_not_exists(#P)",
             ReturnConsumedCapacity="TOTAL",
         )
+        # print("write", ret["ConsumedCapacity"])
+        StorageStatistics.instance().add_write_units(
+            ret["ConsumedCapacity"]["CapacityUnits"]
+        )
         return ret
 
     def update(self, key: str, data: dict):
@@ -35,7 +40,7 @@ class DynamoStorage(Storage):
         def get_object(obj: dict):
             return next(iter(obj.values()))
 
-        self._dynamodb.update_item(
+        ret = self._dynamodb.update_item(
             TableName=self.storage_name,
             Key={self._key_name: {"S": key}},
             ConditionExpression="attribute_exists(#P)",
@@ -47,6 +52,9 @@ class DynamoStorage(Storage):
                 ":data": {"B": base64.b64decode(get_object(data["data"]))},
             },
             ReturnConsumedCapacity="TOTAL",
+        )
+        StorageStatistics.instance().add_write_units(
+            ret["ConsumedCapacity"]["CapacityUnits"]
         )
 
     # def _toSchema(self, node: Node):
@@ -98,7 +106,7 @@ class DynamoStorage(Storage):
             }
             if node.modified.epoch:
                 # FIXME: hide under abstraction
-                assert node.modified.epoch.version
+                assert node.modified.epoch.version is not None
                 counters = list(node.modified.epoch.version)
                 if len(counters) == 0:
                     counters = [""]
@@ -114,7 +122,7 @@ class DynamoStorage(Storage):
         # strip traling comma - boto3 will not accept that
         update_expr = update_expr[:-1]
 
-        self._dynamodb.update_item(
+        ret = self._dynamodb.update_item(
             TableName=self.storage_name,
             Key={self._key_name: {"S": node.path}},
             ConditionExpression="attribute_exists(#P)",
@@ -123,21 +131,32 @@ class DynamoStorage(Storage):
             ExpressionAttributeValues=schema,
             ReturnConsumedCapacity="TOTAL",
         )
+        StorageStatistics.instance().add_write_units(
+            ret["ConsumedCapacity"]["CapacityUnits"]
+        )
 
     def read(self, key: str):
         """DynamoDb read"""
 
-        return self._dynamodb.get_item(
-            TableName=self.storage_name, Key={self._key_name: {"S": key}}
+        ret = self._dynamodb.get_item(
+            TableName=self.storage_name,
+            Key={self._key_name: {"S": key}},
+            ReturnConsumedCapacity="TOTAL",
+        )
+        StorageStatistics.instance().add_read_units(
+            ret["ConsumedCapacity"]["CapacityUnits"]
         )
 
     def delete(self, key: str):
         """DynamoDb delete"""
 
-        self._dynamodb.delete_item(
+        ret = self._dynamodb.delete_item(
             TableName=self.storage_name,
             Key={self._key_name: {"S": key}},
             ReturnConsumedCapacity="TOTAL",
+        )
+        StorageStatistics.instance().add_write_units(
+            ret["ConsumedCapacity"]["CapacityUnits"]
         )
 
     @property

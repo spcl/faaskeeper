@@ -4,6 +4,7 @@ from typing import Optional, Set, Tuple
 from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 
 from faaskeeper.node import Node, NodeDataType
+from faaskeeper.stats import StorageStatistics
 from faaskeeper.version import SystemCounter, Version
 from functions.aws.control.dynamo import DynamoStorage as DynamoDriver
 
@@ -88,6 +89,10 @@ class DynamoStorage(Storage):
                 ReturnValues="ALL_NEW",
                 ReturnConsumedCapacity="TOTAL",
             )
+            # print("lock", ret["ConsumedCapacity"])
+            StorageStatistics.instance().add_write_units(
+                ret["ConsumedCapacity"]["CapacityUnits"]
+            )
             # store raw provider data
             data = ret["Attributes"]
             n: Optional[Node] = None
@@ -153,7 +158,7 @@ class DynamoStorage(Storage):
             # strip traling comma - boto3 will not accept that
             update_expr = update_expr[:-1]
 
-            self._state_storage._dynamodb.update_item(
+            ret = self._state_storage._dynamodb.update_item(
                 TableName=self._state_storage.storage_name,
                 # path to the node
                 Key={"path": {"S": node.path}},
@@ -168,6 +173,10 @@ class DynamoStorage(Storage):
                     **update_values,
                 },
                 ReturnConsumedCapacity="TOTAL",
+            )
+            # print("commit", ret["ConsumedCapacity"])
+            StorageStatistics.instance().add_write_units(
+                ret["ConsumedCapacity"]["CapacityUnits"]
             )
             return True
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
@@ -187,13 +196,17 @@ class DynamoStorage(Storage):
                 ReturnValues="ALL_NEW",
                 ReturnConsumedCapacity="TOTAL",
             )
+            # print("counter", ret["ConsumedCapacity"])
+            StorageStatistics.instance().add_write_units(
+                ret["ConsumedCapacity"]["CapacityUnits"]
+            )
             return SystemCounter.from_provider_schema(ret["Attributes"]["cFxidSys"])
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return None
 
     def delete_node(self, node: Node, timestamp: int):
 
-        self._state_storage._dynamodb.delete_item(
+        ret = self._state_storage._dynamodb.delete_item(
             TableName=self._state_storage.storage_name,
             # path to the node
             Key={"path": {"S": node.path}},
@@ -203,4 +216,7 @@ class DynamoStorage(Storage):
             # timelock value
             ExpressionAttributeValues={":mytimelock": {"N": str(timestamp)}},
             ReturnConsumedCapacity="TOTAL",
+        )
+        StorageStatistics.instance().add_write_units(
+            ret["ConsumedCapacity"]["CapacityUnits"]
         )
