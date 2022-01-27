@@ -391,7 +391,9 @@ def handler(event: dict, context):
             ret = ops[op](record["eventID"], write_event, verbose_output)
             if ret:
                 if verbose_output:
-                    print(f"Failed processing write event {record['eventID']}")
+                    print(ret)
+                elif ret["status"] == "failure":
+                    print(f"Failed processing write event {record['eventID']}: {ret}")
                 # Failure - notify client
                 notify(write_event, ret)
                 continue
