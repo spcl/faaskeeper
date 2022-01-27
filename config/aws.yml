@@ -159,7 +159,6 @@ functions:
               - Arn
     events:
       - schedule:
-          name: heartbeat-schedule
           rate: rate(1 minute)
           enabled: false
       - http:
