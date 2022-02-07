@@ -121,7 +121,11 @@ def handler(event: dict, context):
                 #    print(write_event)
             elif "body" in record:
                 write_event = json.loads(record["body"])
-                event_type = DistributorEventType(int(write_event["type"]))
+                event_type = DistributorEventType(int(write_event["type"]["N"]))
+                if "data" in record["messageAttributes"]:
+                    write_event["data"] = {
+                        "B": record["messageAttributes"]["data"]["binaryValue"]
+                    }
             else:
                 raise NotImplementedError()
 

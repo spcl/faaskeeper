@@ -135,7 +135,8 @@ class DistributorSetData(DistributorEvent):
         node = Node(deserializer.deserialize(event_data["path"]))
         counter = SystemCounter.from_provider_schema(event_data["counter"])
         node.modified = Version(counter, None)
-        node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
+        # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
+        node.data = base64.b64decode(event_data["data"]["B"])
 
         return DistributorSetData(node)
 

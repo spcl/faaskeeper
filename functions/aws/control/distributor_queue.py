@@ -1,5 +1,7 @@
+import json
 from abc import ABC, abstractmethod
 
+import boto3
 from boto3.dynamodb.types import TypeSerializer
 
 from faaskeeper.version import SystemCounter
@@ -26,6 +28,13 @@ class DistributorQueueDynamo(DistributorQueue):
         # self._queue = DynamoDriver(f"{deployment_name}-distribute-queue", "key")
         self._queue = DynamoDriver(f"{deployment_name}-distribute-queue", "key")
         self._type_serializer = TypeSerializer()
+        self._sqs_client = boto3.client(
+            "sqs", "us-east-1"
+        )  # self._config.deployment_region)
+        response = self._sqs_client.get_queue_url(
+            QueueName="FAASKEEPER_DISTRIBUTOR_QUEUE.fifo"
+        )
+        self._sqs_queue_url = response["QueueUrl"]
 
     def push(
         self,
@@ -38,15 +47,34 @@ class DistributorQueueDynamo(DistributorQueue):
         # FIXME: update interface
         """We must use a single shard - everything is serialized.
         """
-        counter_val = counter.sum
-        self._queue.write(
-           "",
-           {
-               "key": self._type_serializer.serialize("faaskeeper"),
-               "timestamp": self._type_serializer.serialize(counter_val),
-               "sourceIP": ip,
-               "sourcePort": port,
-               "user_timestamp": user_timestamp,
-               **event.serialize(self._type_serializer),
-           },
-         )
+        payload = {
+            "sourceIP": ip,
+            "sourcePort": port,
+            "user_timestamp": user_timestamp,
+            **event.serialize(self._type_serializer),
+        }
+        if "data" in payload:
+            binary_data = payload["data"]["B"]
+            del payload["data"]
+            attributes = {"data": {"BinaryValue": binary_data, "DataType": "Binary"}}
+        else:
+            attributes = {}
+        response = self._sqs_client.send_message(
+            QueueUrl=self._sqs_queue_url,
+            MessageBody=json.dumps(payload),
+            MessageAttributes=attributes,
+            MessageGroupId="0",
+            MessageDeduplicationId=str(counter.sum),
+        )
+        # counter_val = counter.sum
+        # self._queue.write(
+        #   "",
+        #   {
+        #       "key": self._type_serializer.serialize("faaskeeper"),
+        #       "timestamp": self._type_serializer.serialize(counter_val),
+        #       "sourceIP": ip,
+        #       "sourcePort": port,
+        #       "user_timestamp": user_timestamp,
+        #       **event.serialize(self._type_serializer),
+        #   },
+        # )

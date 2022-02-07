@@ -252,7 +252,7 @@ def set_data(id: str, write_event: dict, verbose_output: bool) -> Optional[dict]
         # we propagate data to another queue, we should use the already
         # base64-encoded data
         begin_push = time.time()
-        system_node.data = data
+        # system_node.data = data
         assert config.distributor_queue
         config.distributor_queue.push(
             write_event["timestamp"],
@@ -392,7 +392,7 @@ def notify(write_event: dict, ret: dict, event_id):
             s.settimeout(2)
             source_ip = get_object(write_event["sourceIP"])
             source_port = int(get_object(write_event["sourcePort"]))
-            print(source_ip, source_port)
+            # print(source_ip, source_port)
             s.connect((source_ip, source_port))
             print(f"Connected to {source_ip}:{source_port}")
             s.sendall(
@@ -418,12 +418,13 @@ def handler(event: dict, context):
             # if verbose_output:
             #    print(write_event)
         elif "body" in record:
-            print(record)
             write_event = json.loads(record["body"])
             if "data" in record["messageAttributes"]:
-                write_event["data"] = {'B': record["messageAttributes"]["data"]["binaryValue"]}
+                write_event["data"] = {
+                    "B": record["messageAttributes"]["data"]["binaryValue"]
+                }
             event_id = record["attributes"]["MessageDeduplicationId"]
-            write_event['timestamp'] = {'S': event_id}
+            write_event["timestamp"] = {"S": event_id}
         else:
             raise NotImplementedError()
 
