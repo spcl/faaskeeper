@@ -36,6 +36,7 @@ functions:
           - dynamodb:PutItem
           - dynamodb:UpdateItem
           - dynamodb:DeleteItem
+          - sqs:*
         Resource:
           - Fn::GetAtt:
               - dataTable
@@ -49,6 +50,9 @@ functions:
           - Fn::GetAtt:
               - distributeTable
               - Arn
+          - Fn::GetAtt:
+              - distributorQueue
+              - Arn
     events:
       - stream:
           type: dynamodb
@@ -59,6 +63,13 @@ functions:
             Fn::GetAtt:
               - writerTable
               - StreamArn
+      - sqs:
+          batchSize: 10
+          maximumBatchingWindow: 0
+          arn:
+            Fn::GetAtt:
+              - writerQueue
+              - Arn
   distributor:
     handler: functions/aws/distributor.handler
     environment:
@@ -113,6 +124,14 @@ functions:
             Fn::GetAtt:
               - distributeTable
               - StreamArn
+      - sqs:
+          batchSize: 10
+          maximumBatchingWindow: 0
+          arn:
+            Fn::GetAtt:
+              - distributorQueue
+              - Arn
+
   watch:
     handler: functions/aws/watch.handler
     environment:
@@ -206,6 +225,18 @@ resources:
             KeyType: RANGE
         StreamSpecification:
           StreamViewType: NEW_IMAGE
+    writerQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: FAASKEEPER_WRITER_QUEUE.fifo
+        FifoQueue: True
+        DelaySeconds: 0
+    distributorQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: FAASKEEPER_DISTRIBUTOR_QUEUE.fifo
+        FifoQueue: True
+        DelaySeconds: 0
     distributeTable:
       Type: AWS::DynamoDB::Table
       Properties:
