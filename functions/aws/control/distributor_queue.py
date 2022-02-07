@@ -23,6 +23,7 @@ class DistributorQueue(ABC):
 
 class DistributorQueueDynamo(DistributorQueue):
     def __init__(self, deployment_name: str):
+        # self._queue = DynamoDriver(f"{deployment_name}-distribute-queue", "key")
         self._queue = DynamoDriver(f"{deployment_name}-distribute-queue", "key")
         self._type_serializer = TypeSerializer()
 
@@ -39,13 +40,13 @@ class DistributorQueueDynamo(DistributorQueue):
         """
         counter_val = counter.sum
         self._queue.write(
-            "",
-            {
-                "key": self._type_serializer.serialize("faaskeeper"),
-                "timestamp": self._type_serializer.serialize(counter_val),
-                "sourceIP": ip,
-                "sourcePort": port,
-                "user_timestamp": user_timestamp,
-                **event.serialize(self._type_serializer),
-            },
-        )
+           "",
+           {
+               "key": self._type_serializer.serialize("faaskeeper"),
+               "timestamp": self._type_serializer.serialize(counter_val),
+               "sourceIP": ip,
+               "sourcePort": port,
+               "user_timestamp": user_timestamp,
+               **event.serialize(self._type_serializer),
+           },
+         )

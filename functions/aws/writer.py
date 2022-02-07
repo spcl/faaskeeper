@@ -379,22 +379,26 @@ ops: Dict[str, Callable[[str, dict, bool], Optional[dict]]] = {
 }
 
 
+# def get_object(obj: dict):
+#    return next(iter(obj.values()))
 def get_object(obj: dict):
     return next(iter(obj.values()))
 
 
-def notify(write_event: dict, ret: dict):
+def notify(write_event: dict, ret: dict, event_id):
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
             s.settimeout(2)
             source_ip = get_object(write_event["sourceIP"])
             source_port = int(get_object(write_event["sourcePort"]))
+            print(source_ip, source_port)
             s.connect((source_ip, source_port))
             print(f"Connected to {source_ip}:{source_port}")
             s.sendall(
                 json.dumps(
-                    {**ret, "event": get_object(write_event["timestamp"])}
+                    # {**ret, "event": get_object(write_event["timestamp"])}
+                    {**ret, "event": event_id}
                 ).encode()
             )
         except socket.timeout:
@@ -408,35 +412,45 @@ def handler(event: dict, context):
     processed_events = 0
     StorageStatistics.instance().reset()
     for record in events:
-        if record["eventName"] == "INSERT":
+        if "dynamodb" in record and record["eventName"] == "INSERT":
             write_event = record["dynamodb"]["NewImage"]
+            event_id = record["eventID"]
             # if verbose_output:
             #    print(write_event)
+        elif "body" in record:
+            print(record)
+            write_event = json.loads(record["body"])
+            if "data" in record["messageAttributes"]:
+                write_event["data"] = {'B': record["messageAttributes"]["data"]["binaryValue"]}
+            event_id = record["attributes"]["MessageDeduplicationId"]
+            write_event['timestamp'] = {'S': event_id}
+        else:
+            raise NotImplementedError()
 
-            op = get_object(write_event["op"])
-            if op not in ops:
-                if verbose_output:
-                    print(
-                        "Unknown operation {op} with ID {id}, "
-                        "timestamp {timestamp}".format(
-                            op=get_object(write_event["op"]),
-                            id=record["eventID"],
-                            timestamp=write_event["timestamp"],
-                        )
+        op = get_object(write_event["op"])
+        if op not in ops:
+            if verbose_output:
+                print(
+                    "Unknown operation {op} with ID {id}, "
+                    "timestamp {timestamp}".format(
+                        op=get_object(write_event["op"]),
+                        id=record["eventID"],
+                        timestamp=write_event["timestamp"],
                     )
-                continue
+                )
+            continue
 
-            ret = ops[op](record["eventID"], write_event, verbose_output)
-            if ret:
-                if verbose_output:
-                    print(ret)
-                elif ret["status"] == "failure":
-                    print(f"Failed processing write event {record['eventID']}: {ret}")
-                # Failure - notify client
-                notify(write_event, ret)
-                continue
-            else:
-                processed_events += 1
+        ret = ops[op](event_id, write_event, verbose_output)
+        if ret:
+            if verbose_output:
+                print(ret)
+            elif ret["status"] == "failure":
+                print(f"Failed processing write event {record['eventID']}: {ret}")
+            # Failure - notify client
+            notify(write_event, ret, event_id)
+            continue
+        else:
+            processed_events += 1
 
     # print(f"Successfully processed {processed_events} records out of {len(events)}")
     print(

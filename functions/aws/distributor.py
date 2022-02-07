@@ -114,13 +114,18 @@ def handler(event: dict, context):
         begin = time.time()
         watches_submitters = []
         for record in events:
-            if record["eventName"] != "INSERT":
-                continue
-
-            write_event = record["dynamodb"]["NewImage"]
+            if "dynamodb" in record and record["eventName"] == "INSERT":
+                write_event = record["dynamodb"]["NewImage"]
+                event_type = DistributorEventType(int(write_event["type"]["N"]))
+                # if verbose_output:
+                #    print(write_event)
+            elif "body" in record:
+                write_event = json.loads(record["body"])
+                event_type = DistributorEventType(int(write_event["type"]))
+            else:
+                raise NotImplementedError()
 
             # FIXME: hide under abstraction, boto3 deserialize
-            event_type = DistributorEventType(int(write_event["type"]["N"]))
             operation: DistributorEvent
             counters = []
             watches = {}
