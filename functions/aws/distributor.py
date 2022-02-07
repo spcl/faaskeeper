@@ -1,6 +1,7 @@
 import hashlib
 import json
 import socket
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Set
 
@@ -53,6 +54,13 @@ for r in regions:
     epoch_counters[r] = set()
 executor = ThreadPoolExecutor(max_workers=2 * len(regions))
 
+repetitions = 0
+sum_total = 0.0
+sum_notify = 0.0
+sum_write = 0.0
+sum_watch = 0.0
+sum_watch_wait = 0.0
+
 
 def get_object(obj: dict):
     return next(iter(obj.values()))
@@ -103,6 +111,7 @@ def handler(event: dict, context):
     processed_events = 0
     StorageStatistics.instance().reset()
     try:
+        begin = time.time()
         watches_submitters = []
         for record in events:
             if record["eventName"] != "INSERT":
@@ -134,21 +143,26 @@ def handler(event: dict, context):
             else:
                 raise NotImplementedError()
             try:
+                begin_write = time.time()
                 # write new data
                 for r in regions:
                     if verbose_output:
                         print("Apply op", watches, epoch_counters[r])
                     ret = operation.execute(config.user_storage, epoch_counters[r])
+                end_write = time.time()
+                begin_watch = time.time()
                 # start watch delivery
                 for r in regions:
                     if event_type == DistributorEventType.SET_DATA:
                         watches_submitters.append(
                             executor.submit(launch_watcher, r, watches)
                         )
+                end_watch = time.time()
                 for r in regions:
                     epoch_counters[r].update(counters)
                     if verbose_output:
                         print("Applied op", epoch_counters[r])
+                begin_notify = time.time()
                 if ret:
                     # notify client about success
                     notify(write_event, ret)
@@ -158,6 +172,7 @@ def handler(event: dict, context):
                         write_event,
                         {"status": "failure", "reason": "distributor failured"},
                     )
+                end_notify = time.time()
             except Exception:
                 print("Failure!")
                 import traceback
@@ -166,8 +181,31 @@ def handler(event: dict, context):
                 notify(
                     write_event, {"status": "failure", "reason": "distributor failure"},
                 )
+        begin_watch_wait = time.time()
         for f in watches_submitters:
             f.result()
+        end_watch_wait = time.time()
+        end = time.time()
+
+        global repetitions
+        global sum_total
+        global sum_notify
+        global sum_write
+        global sum_watch
+        global sum_watch_wait
+        repetitions += 1
+        sum_total += end - begin
+        sum_notify += end_notify - begin_notify
+        sum_write += end_write - begin_write
+        sum_watch += end_watch - begin_watch
+        sum_watch_wait += end_watch_wait - begin_watch_wait
+        if repetitions % 100 == 0:
+            print("RESULT_TOTAL", sum_total)
+            print("RESULT_NOTIFY", sum_notify)
+            print("RESULT_WRITE", sum_write)
+            print("RESULT_WATCH_WAIT", sum_watch)
+            print("RESULT_WATCH_WAIT", sum_watch_wait)
+
     except Exception:
         print("Failure!")
         import traceback
