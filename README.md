@@ -9,6 +9,8 @@ At the moment we support an AWS deployment only.
 Adding support for other commercial clouds (Azure, GCP)
 is planned in the future.
 
+To use a deployed FaaSKeeper instance, check our Python client library: [spcl/faaskeeper-python](https://github.com/spcl/faaskeeper-python).
+
 ## Dependencies
 
 * Python >= 3.6
