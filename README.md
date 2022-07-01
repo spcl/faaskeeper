@@ -64,6 +64,14 @@ bin/fkCli.py aws faaskeeper-dev
 
 ## Design
 
+### Storage
+
+FaaSKeeper uses two types of storage - system and user.
+For system, we require strong consistency, as different writer functions must be able to safely
+modify data in parallel.
+For user data storage, we require strong consistency as well to prevent stale reads that would
+violate ZooKeeper consistency principles.
+
 ### Watches
 
 To register a watch, the client performs the following sequence of operations: read node, add
@@ -103,6 +111,7 @@ retained when the update was `delete` and triggered when the update was `create`
 Triggered by delete on the node and `create` and `delete` on its children.
 To detect if the watch is not set on an older version of the node, we
 use the `children` timestamp.
+
 
 ## Development
 
