@@ -79,13 +79,13 @@ def service(provider: str, config, clean: bool):
                 f"Remove existing service {service_name} at provider: {provider}"
             )
             execute(
-                f"sls remove --stage {service_name} -c config/{provider}.yml", env=env
+                f"sls remove --stage {service_name} -c {provider}.yml", env=env
             )
         except Exception:
             logging.warn("Removing service didn't succeed!")
 
     logging.info(f"Deploy service {service_name} to provider: {provider}")
-    execute(f"sls deploy --stage {service_name} -c config/{provider}.yml", env=env)
+    execute(f"sls deploy --stage {service_name} -c {provider}.yml", env=env)
 
     if provider == "aws":
         aws_init(f"faaskeeper-{service_name}", config_json["deployment-region"])
@@ -117,7 +117,7 @@ def functions(provider: str, config, function: str):
         functions = ["writer", "distributor", "watch", "heartbeat"]
     for func in functions:
         execute(
-            f"sls deploy --stage {service_name} --function {func} -c config/{provider}.yml",
+            f"sls deploy --stage {service_name} --function {func} -c {provider}.yml",
             env=env,
         )
 
@@ -147,7 +147,7 @@ def remove_service(provider: str, config):
     }
     service_name = config_json["deployment-name"]
     logging.info(f"Remove existing service {service_name} at provider: {provider}")
-    execute(f"sls remove --stage {service_name} -c config/{provider}.yml", env=env)
+    execute(f"sls remove --stage {service_name} -c {provider}.yml", env=env)
 
 
 if __name__ == "__main__":
