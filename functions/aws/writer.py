@@ -37,11 +37,18 @@ sum_commit = 0.0
 sum_push = 0.0
 
 
-def verify_event(id: str, write_event: dict, verbose_output: bool, flags=[]) -> bool:
+def verify_event(id: str, write_event: dict, verbose_output: bool, flags=None) -> bool:
+
+    events = []
+    if flags is not None:
+        events = [*mandatory_event_fields, *flags]
+    else:
+        events = [*mandatory_event_fields]
+
     """
         Handle malformed events correctly.
     """
-    if any(k not in write_event.keys() for k in [*mandatory_event_fields, *flags]):
+    if any(k not in write_event.keys() for k in events):
         if verbose_output:
             print(
                 "Incorrect event with ID {id}, timestamp {timestamp}".format(

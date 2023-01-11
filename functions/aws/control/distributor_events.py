@@ -75,7 +75,7 @@ class DistributorCreateNode(DistributorEvent):
         node.created = Version(counter, None)
         node.modified = Version(counter, None)
         node.children = []
-        #node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
+        # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
         node.data = base64.b64decode(event_data["data"]["B"])
 
         parent_node = Node(deserializer.deserialize(event_data["parent_path"]))
