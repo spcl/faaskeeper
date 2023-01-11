@@ -7,6 +7,7 @@ provider:
   stage: dev
   region: ${env:FK_DEPLOYMENT_REGION}
   environment:
+    SQS_QUEUE: ${self:service}-${opt:stage, self:provider.stage}
     DYNAMODB_TABLE: ${self:service}-${opt:stage, self:provider.stage}
     S3_BUCKET:      ${self:service}-${opt:stage, self:provider.stage}
 
@@ -30,6 +31,7 @@ functions:
       USER_STORAGE: ${env:FK_USER_STORAGE}
       SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
       DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
+      QUEUE_PREFIX: ${self:service}-${opt:stage, self:provider.stage}
     iamRoleStatements:
       - Effect: Allow
         Action:
@@ -80,6 +82,7 @@ functions:
       USER_STORAGE: ${env:FK_USER_STORAGE}
       SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
       DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
+      QUEUE_PREFIX: ${self:service}-${opt:stage, self:provider.stage}
     iamRoleStatements:
       - Effect: Allow
         Action:
@@ -229,13 +232,13 @@ resources:
     writerQueue:
       Type: AWS::SQS::Queue
       Properties:
-        QueueName: FAASKEEPER_WRITER_QUEUE.fifo
+        QueueName: ${self:provider.environment.SQS_QUEUE}-writer-sqs.fifo
         FifoQueue: True
         DelaySeconds: 0
     distributorQueue:
       Type: AWS::SQS::Queue
       Properties:
-        QueueName: FAASKEEPER_DISTRIBUTOR_QUEUE.fifo
+        QueueName: ${self:provider.environment.SQS_QUEUE}-distributor-sqs.fifo
         FifoQueue: True
         DelaySeconds: 0
     distributeTable:

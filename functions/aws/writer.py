@@ -148,7 +148,7 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
 
         # we propagate data to another queue, we should use the already
         # base64-encoded data
-        node.data = data
+        #node.data = data
 
         assert config.distributor_queue
         config.distributor_queue.push(

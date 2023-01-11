@@ -1,4 +1,5 @@
 import json
+import os
 from abc import ABC, abstractmethod
 
 import boto3
@@ -28,11 +29,12 @@ class DistributorQueueDynamo(DistributorQueue):
         # self._queue = DynamoDriver(f"{deployment_name}-distribute-queue", "key")
         self._queue = DynamoDriver(f"{deployment_name}-distribute-queue", "key")
         self._type_serializer = TypeSerializer()
+        name = os.environ['QUEUE_PREFIX']
         self._sqs_client = boto3.client(
             "sqs", "us-east-1"
         )  # self._config.deployment_region)
         response = self._sqs_client.get_queue_url(
-            QueueName="FAASKEEPER_DISTRIBUTOR_QUEUE.fifo"
+            QueueName=f"{name}-distributor-sqs.fifo"
         )
         self._sqs_queue_url = response["QueueUrl"]
 
@@ -53,6 +55,7 @@ class DistributorQueueDynamo(DistributorQueue):
             "user_timestamp": user_timestamp,
             **event.serialize(self._type_serializer),
         }
+        #print(payload)
         if "data" in payload:
             binary_data = payload["data"]["B"]
             del payload["data"]

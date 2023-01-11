@@ -3,6 +3,7 @@
   "port": 5000,
   "deployment-name": "testing-persistent",
   "deployment-region": "us-east-1",
+  "cloud-provider": "aws",
   "client-port": 5000,
   "user-storage": "persistent",
   "system-storage": "key-value",
