@@ -148,7 +148,7 @@ def create_node(id: str, write_event: dict, verbose_output: bool) -> Optional[di
 
         # we propagate data to another queue, we should use the already
         # base64-encoded data
-        #node.data = data
+        # node.data = data
 
         assert config.distributor_queue
         config.distributor_queue.push(
@@ -385,7 +385,7 @@ def get_object(obj: dict):
     return next(iter(obj.values()))
 
 
-def notify(write_event: dict, ret: dict, event_id):
+def notify(write_event: dict, ret: dict):
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
@@ -397,8 +397,7 @@ def notify(write_event: dict, ret: dict, event_id):
             print(f"Connected to {source_ip}:{source_port}")
             s.sendall(
                 json.dumps(
-                    # {**ret, "event": get_object(write_event["timestamp"])}
-                    {**ret, "event": event_id}
+                    {**ret, "event": get_object(write_event["timestamp"])}
                 ).encode()
             )
         except socket.timeout:
@@ -448,7 +447,7 @@ def handler(event: dict, context):
             elif ret["status"] == "failure":
                 print(f"Failed processing write event {record['eventID']}: {ret}")
             # Failure - notify client
-            notify(write_event, ret, event_id)
+            notify(write_event, ret)
             continue
         else:
             processed_events += 1
