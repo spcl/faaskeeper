@@ -225,6 +225,8 @@ def handler(event: dict, context):
         end_watch_wait = time.time()
         end = time.time()
         logging.info("Finish waiting for watchers")
+        for r in regions:
+            epoch_counters[r] = set()
 
         global repetitions
         global sum_total
