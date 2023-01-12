@@ -50,6 +50,18 @@ def init(service_name: str, region: str):
     node.data = b""
     s3.write(node)
 
+    # Initialize root node for Redis
+    redis = model.UserRedisStorage()
+    node = Node("/")
+    node.created = Version(SystemCounter.from_raw_data([0]), None)
+    node.modified = Version(
+        SystemCounter.from_raw_data([0]), EpochCounter.from_raw_data(set())
+    )
+    node.children = []
+    node.data = b""
+    print('write')
+    redis.write(node)
+
     # initialize ephemeral counter
     # FIXME: do it for every region
     # dynamodb.put_item(
