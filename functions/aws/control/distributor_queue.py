@@ -41,18 +41,6 @@ class DistributorQueueDynamo(DistributorQueue):
             We must use a single shard - everything is serialized.
         """
         counter_val = counter.sum
-        print("Distributor push", event)
-        print(
-            "Distributor push",
-            {
-                "key": self._type_serializer.serialize("faaskeeper"),
-                "timestamp": self._type_serializer.serialize(counter_val),
-                "sourceIP": ip,
-                "sourcePort": port,
-                "user_timestamp": user_timestamp,
-                **event.serialize(self._type_serializer),
-            },
-        )
         self._queue.write(
             "",
             {
@@ -88,14 +76,12 @@ class DistributorQueueSQS(DistributorQueue):
         """We must use a single shard - everything is serialized.
         """
         # FIXME: is it safe here to serialize the types?
-        print("Distributor push", event)
         payload: Dict[str, str] = {
             "sourceIP": ip,
             "sourcePort": port,
             "user_timestamp": user_timestamp,
             **event.serialize(self._type_serializer),
         }
-        print("Distributor push", payload)
         # if "data" in payload:
         #    binary_data = payload["data"]["B"]
         #    del payload["data"]
