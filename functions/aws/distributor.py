@@ -107,7 +107,7 @@ def launch_watcher(region: str, json_in: dict):
 def handler(event: dict, context):
 
     events = event["Records"]
-    logging.info(f"Begin processing {len(events)} events")
+    #logging.info(f"Begin processing {len(events)} events")
 
     processed_events = 0
     StorageStatistics.instance().reset()
@@ -128,7 +128,7 @@ def handler(event: dict, context):
             else:
                 raise NotImplementedError()
 
-            logging.info("Begin processing event", write_event)
+            #logging.info("Begin processing event", write_event)
 
             # FIXME: hide under abstraction, boto3 deserialize
             operation: DistributorEvent
@@ -153,13 +153,13 @@ def handler(event: dict, context):
             else:
                 raise NotImplementedError()
             try:
-                logging.info(f"Prepared event", write_event)
+                #logging.info(f"Prepared event", write_event)
                 begin_write = time.time()
                 # write new data
                 for r in regions:
                     ret = operation.execute(config.user_storage, epoch_counters[r])
                 end_write = time.time()
-                logging.info("Finished region operation")
+                #logging.info("Finished region operation")
                 begin_watch = time.time()
                 # start watch delivery
                 for r in regions:
@@ -169,17 +169,17 @@ def handler(event: dict, context):
                     #    )
                     # FIXME: other watchers
                     # FIXME: reenable submission
-                    logging.info(
-                        region_watches[r].query_watches(
-                            operation.node.path, [WatchType.GET_DATA]
-                        )
+                    #logging.info(
+                    region_watches[r].query_watches(
+                        operation.node.path, [WatchType.GET_DATA]
                     )
+                    #)
 
                 end_watch = time.time()
-                logging.info("Finished watch dispatch")
+                #logging.info("Finished watch dispatch")
                 for r in regions:
                     epoch_counters[r].update(counters)
-                logging.info("Updated epoch counters")
+                #logging.info("Updated epoch counters")
                 begin_notify = time.time()
                 if ret:
                     # notify client about success
@@ -203,7 +203,7 @@ def handler(event: dict, context):
                         {"status": "failure", "reason": "distributor failured"},
                     )
                 end_notify = time.time()
-                logging.info("Finished notifying the client")
+                #logging.info("Finished notifying the client")
             except Exception:
                 print("Failure!")
                 import traceback
@@ -218,13 +218,13 @@ def handler(event: dict, context):
                     write_event,
                     {"status": "failure", "reason": "distributor failured"},
                 )
-        logging.info("Start waiting for watchers")
+        #logging.info("Start waiting for watchers")
         begin_watch_wait = time.time()
         for f in watches_submitters:
             f.result()
         end_watch_wait = time.time()
         end = time.time()
-        logging.info("Finish waiting for watchers")
+        #logging.info("Finish waiting for watchers")
         for r in regions:
             epoch_counters[r] = set()
 

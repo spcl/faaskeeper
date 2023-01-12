@@ -80,7 +80,7 @@ def create_node(id: str, write_event: dict) -> Optional[dict]:
         # TODO: ephemeral
         # TODO: sequential
         path = get_object(write_event["path"])
-        logging.info(f"Attempting to create node at {path}")
+        #logging.info(f"Attempting to create node at {path}")
 
         data = get_object(write_event["data"])
 
@@ -212,7 +212,7 @@ def set_data(id: str, write_event: dict) -> Optional[dict]:
     try:
         path = get_object(write_event["path"])
         # version = get_object(write_event["version"])
-        logging.info(f"Attempting to write data at {path}")
+        #logging.info(f"Attempting to write data at {path}")
 
         begin_lock = time.time()
         # FIXME :limit number of attempts
@@ -224,7 +224,7 @@ def set_data(id: str, write_event: dict) -> Optional[dict]:
             else:
                 break
         end_lock = time.time()
-        logging.info(f"Acquired lock at {path}")
+        #logging.info(f"Acquired lock at {path}")
 
         # does the node exist?
         if system_node is None:
@@ -236,7 +236,7 @@ def set_data(id: str, write_event: dict) -> Optional[dict]:
         if counter is None:
             return {"status": "failure", "reason": "unknown"}
         end_atomic = time.time()
-        logging.info(f"Incremented system counter")
+        #logging.info(f"Incremented system counter")
 
         # FIXME: distributor
         # FIXME: epoch
@@ -245,13 +245,13 @@ def set_data(id: str, write_event: dict) -> Optional[dict]:
         data = get_object(write_event["data"])
         system_node.modified = Version(counter, None)
         system_node.data_b64 = data
-        logging.info(f"Finished commit preparation")
+        #logging.info(f"Finished commit preparation")
 
         begin_commit = time.time()
         if not config.system_storage.commit_node(system_node, timestamp):
             return {"status": "failure", "reason": "unknown"}
         end_commit = time.time()
-        logging.info(f"Finished commit")
+        #logging.info(f"Finished commit")
 
         begin_push = time.time()
         assert config.distributor_queue
@@ -263,7 +263,7 @@ def set_data(id: str, write_event: dict) -> Optional[dict]:
             DistributorSetData(get_object(write_event["session_id"]), system_node),
         )
         end_push = time.time()
-        logging.info(f"Finished pushing update")
+        #logging.info(f"Finished pushing update")
 
         end = time.time()
 
@@ -306,7 +306,7 @@ def delete_node(id: str, write_event: dict) -> Optional[dict]:
         # TODO: ephemeral
         # TODO: sequential
         path = get_object(write_event["path"])
-        logging.info(f"Attempting to create node at {path}")
+        #logging.info(f"Attempting to create node at {path}")
 
         # FIXME :limit number of attempts
         while True:
@@ -410,7 +410,7 @@ def get_object(obj: dict):
 def handler(event: dict, context):
 
     events = event["Records"]
-    logging.info(f"Begin processing {len(events)} events")
+    #logging.info(f"Begin processing {len(events)} events")
     processed_events = 0
     StorageStatistics.instance().reset()
     for record in events:
@@ -428,8 +428,8 @@ def handler(event: dict, context):
         else:
             raise NotImplementedError()
 
-        logging.info(record)
-        logging.info(f"Begin processing event {write_event}")
+        #logging.info(record)
+        #logging.info(f"Begin processing event {write_event}")
         op = get_object(write_event["op"])
         if op not in ops:
             logging.error(
@@ -444,7 +444,7 @@ def handler(event: dict, context):
 
         ret = ops[op](event_id, write_event)
         if ret:
-            logging.info("Processing finished, result ", ret)
+            #logging.info("Processing finished, result ", ret)
             if ret["status"] == "failure":
                 logging.error(f"Failed processing write event {event_id}: {ret}")
             # Failure - notify client
