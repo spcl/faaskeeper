@@ -22,7 +22,7 @@ from functions.aws.model.watches import Watches
 
 mandatory_event_fields = [
     "op" "path",
-    "user",
+    "session_id",
     "version",
     "sourceIP",
     "sourcePort",
@@ -86,22 +86,22 @@ def launch_watcher(region: str, json_in: dict):
 #    return region_watches[region].get_watch_counters(node_path)
 
 
-def notify(write_event: dict, ret: dict):
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        try:
-            s.settimeout(2)
-            logging.info("Notification", write_event)
-            source_ip = get_object(write_event["sourceIP"])
-            source_port = int(get_object(write_event["sourcePort"]))
-            s.connect((source_ip, source_port))
-            s.sendall(
-                json.dumps(
-                    {**ret, "event": get_object(write_event["user_timestamp"])}
-                ).encode()
-            )
-        except socket.timeout:
-            print(f"Notification of client {source_ip}:{source_port} failed!")
+# def notify(write_event: dict, ret: dict):
+#
+#    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#        try:
+#            s.settimeout(2)
+#            logging.info("Notification", write_event)
+#            source_ip = get_object(write_event["sourceIP"])
+#            source_port = int(get_object(write_event["sourcePort"]))
+#            s.connect((source_ip, source_port))
+#            s.sendall(
+#                json.dumps(
+#                    {**ret, "event": get_object(write_event["user_timestamp"])}
+#                ).encode()
+#            )
+#        except socket.timeout:
+#            print(f"Notification of client {source_ip}:{source_port} failed!")
 
 
 def handler(event: dict, context):
@@ -118,8 +118,6 @@ def handler(event: dict, context):
             if "dynamodb" in record and record["eventName"] == "INSERT":
                 write_event = record["dynamodb"]["NewImage"]
                 event_type = DistributorEventType(int(write_event["type"]["N"]))
-                # if verbose_output:
-                #    print(write_event)
             elif "body" in record:
                 write_event = json.loads(record["body"])
                 event_type = DistributorEventType(int(write_event["type"]["N"]))
@@ -177,10 +175,22 @@ def handler(event: dict, context):
                 begin_notify = time.time()
                 if ret:
                     # notify client about success
-                    notify(write_event, ret)
+                    # notify(write_event, ret)
+                    config.client_channel.notify(
+                        operation.session_id,
+                        get_object(write_event["user_timestamp"]),
+                        write_event,
+                        ret,
+                    )
                     processed_events += 1
                 else:
-                    notify(
+                    # notify(
+                    #    write_event,
+                    #    {"status": "failure", "reason": "distributor failured"},
+                    # )
+                    config.client_channel.notify(
+                        operation.session_id,
+                        get_object(write_event["user_timestamp"]),
                         write_event,
                         {"status": "failure", "reason": "distributor failured"},
                     )
@@ -191,8 +201,14 @@ def handler(event: dict, context):
                 import traceback
 
                 traceback.print_exc()
-                notify(
-                    write_event, {"status": "failure", "reason": "distributor failure"},
+                # notify(
+                #    write_event, {"status": "failure", "reason": "distributor failure"},
+                # )
+                config.client_channel.notify(
+                    operation.session_id,
+                    get_object(write_event["user_timestamp"]),
+                    write_event,
+                    {"status": "failure", "reason": "distributor failured"},
                 )
         logging.info("Start waiting for watchers")
         begin_watch_wait = time.time()

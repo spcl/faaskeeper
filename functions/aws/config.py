@@ -18,6 +18,11 @@ class QueueType(Enum):
     SQS = 1
 
 
+class ChannelType(Enum):
+    TCP = 0
+    SQS = 1
+
+
 class Config:
 
     _instance: Optional["Config"] = None
@@ -80,6 +85,16 @@ class Config:
         else:
             self._distributor_queue = None
 
+        # configure client channel
+        self._client_channel_type = {
+            "tcp": ChannelType.TCP,
+            "sqs": ChannelType.SQS,
+        }.get(environ["CLIENT_CHANNEL"])
+        if self._client_channel_type == ChannelType.TCP:
+            self._client_channel = control.ClientChannelTCP()
+        else:
+            raise RuntimeError("Not implemented!")
+
     @staticmethod
     def instance(with_distributor_queue: bool = True) -> "Config":
         if not Config._instance:
@@ -109,3 +124,7 @@ class Config:
     @property
     def distributor_queue(self) -> Optional[control.DistributorQueue]:
         return self._distributor_queue
+
+    @property
+    def client_channel(self) -> control.ClientChannel:
+        return self._client_channel

@@ -31,6 +31,7 @@ functions:
       USER_STORAGE: ${env:FK_USER_STORAGE}
       SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
       DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
+      CLIENT_CHANNEL: ${env:FK_CLIENT_CHANNEL}
       QUEUE_PREFIX: ${self:service}-${opt:stage, self:provider.stage}
     iamRoleStatements:
       - Effect: Allow
@@ -82,6 +83,7 @@ functions:
       USER_STORAGE: ${env:FK_USER_STORAGE}
       SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
       DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
+      CLIENT_CHANNEL: ${env:FK_CLIENT_CHANNEL}
       QUEUE_PREFIX: ${self:service}-${opt:stage, self:provider.stage}
     iamRoleStatements:
       - Effect: Allow
@@ -240,6 +242,12 @@ resources:
       Properties:
         QueueName: ${self:provider.environment.SQS_QUEUE}-distributor-sqs.fifo
         FifoQueue: True
+        DelaySeconds: 0
+    clientQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:provider.environment.SQS_QUEUE}-client-sqs
+        FifoQueue: False
         DelaySeconds: 0
     distributeTable:
       Type: AWS::DynamoDB::Table

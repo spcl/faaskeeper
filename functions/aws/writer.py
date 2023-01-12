@@ -1,7 +1,6 @@
 import json
 import logging
 import pathlib
-import socket
 import time
 from datetime import datetime
 from time import sleep
@@ -20,7 +19,7 @@ from functions.aws.control.distributor_events import (
 mandatory_event_fields = [
     "op",
     "path",
-    "user",
+    "session_id",
     "version",
     "sourceIP",
     "sourcePort",
@@ -159,7 +158,9 @@ def create_node(id: str, write_event: dict) -> Optional[dict]:
             write_event["sourceIP"],
             write_event["sourcePort"],
             counter,
-            DistributorCreateNode(node, parent_node),
+            DistributorCreateNode(
+                get_object(write_event["session_id"]), node, parent_node
+            ),
         )
 
         return None
@@ -259,7 +260,7 @@ def set_data(id: str, write_event: dict) -> Optional[dict]:
             write_event["sourceIP"],
             write_event["sourcePort"],
             counter,
-            DistributorSetData(system_node),
+            DistributorSetData(get_object(write_event["session_id"]), system_node),
         )
         end_push = time.time()
         logging.info(f"Finished pushing update")
@@ -359,7 +360,9 @@ def delete_node(id: str, write_event: dict) -> Optional[dict]:
             write_event["sourceIP"],
             write_event["sourcePort"],
             counter,
-            DistributorDeleteNode(node, parent_node),
+            DistributorDeleteNode(
+                get_object(write_event["sesion_id"]), node, parent_node
+            ),
         )
         return None
     except Exception:
@@ -385,23 +388,23 @@ def get_object(obj: dict):
     return next(iter(obj.values()))
 
 
-def notify(write_event: dict, ret: dict):
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        try:
-            s.settimeout(2)
-            source_ip = get_object(write_event["sourceIP"])
-            source_port = int(get_object(write_event["sourcePort"]))
-            # print(source_ip, source_port)
-            s.connect((source_ip, source_port))
-            print(f"Connected to {source_ip}:{source_port}")
-            s.sendall(
-                json.dumps(
-                    {**ret, "event": get_object(write_event["timestamp"])}
-                ).encode()
-            )
-        except socket.timeout:
-            print(f"Notification of client {source_ip}:{source_port} failed!")
+# def notify(write_event: dict, ret: dict):
+#
+#    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#        try:
+#            s.settimeout(2)
+#            source_ip = get_object(write_event["sourceIP"])
+#            source_port = int(get_object(write_event["sourcePort"]))
+#            # print(source_ip, source_port)
+#            s.connect((source_ip, source_port))
+#            print(f"Connected to {source_ip}:{source_port}")
+#            s.sendall(
+#                json.dumps(
+#                    {**ret, "event": get_object(write_event["timestamp"])}
+#                ).encode()
+#            )
+#        except socket.timeout:
+#            print(f"Notification of client {source_ip}:{source_port} failed!")
 
 
 def handler(event: dict, context):
@@ -443,11 +446,15 @@ def handler(event: dict, context):
         if ret:
             logging.info("Processing finished, result ", ret)
             if ret["status"] == "failure":
-                logging.error(
-                    f"Failed processing write event {event_id}: {ret}"
-                )
+                logging.error(f"Failed processing write event {event_id}: {ret}")
             # Failure - notify client
-            notify(write_event, ret)
+            config.client_channel.notify(
+                get_object(write_event["session_id"]),
+                get_object(write_event["timestamp"]),
+                write_event,
+                ret,
+            )
+            # notify(write_event, ret)
             continue
         else:
             processed_events += 1
