@@ -361,7 +361,7 @@ def delete_node(id: str, write_event: dict) -> Optional[dict]:
             write_event["sourcePort"],
             counter,
             DistributorDeleteNode(
-                get_object(write_event["sesion_id"]), node, parent_node
+                get_object(write_event["session_id"]), node, parent_node
             ),
         )
         return None
