@@ -8,14 +8,14 @@ from faaskeeper.stats import StorageStatistics
 from .storage import Storage
 
 # FIXME: configurable
-REDIS_HOST = "44.199.217.133"
-
+REDIS_HOST = "3.239.167.62"
+REDIS_PWD = ""
 
 class RedisStorage(Storage):
     def __init__(self):
         # FIXME: prper naming
         super().__init__("redis")
-        self._redis = redis.Redis(host=REDIS_HOST, port=6379, db=0)
+        self._redis = redis.Redis(host=REDIS_HOST, port=6379, db=0, password=REDIS_PWD)
 
     def write(self, key: str, data: Union[dict, bytes]):
         self._redis.set(key, data)
