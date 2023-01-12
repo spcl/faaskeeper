@@ -425,7 +425,6 @@ def handler(event: dict, context):
         else:
             raise NotImplementedError()
 
-        print(record)
         logging.info(record)
         logging.info(f"Begin processing event {write_event}")
         op = get_object(write_event["op"])

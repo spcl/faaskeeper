@@ -115,7 +115,6 @@ def handler(event: dict, context):
         begin = time.time()
         watches_submitters = []
         for record in events:
-            print(record)
             if "dynamodb" in record and record["eventName"] == "INSERT":
                 write_event = record["dynamodb"]["NewImage"]
                 event_type = DistributorEventType(int(write_event["type"]["N"]))
@@ -131,7 +130,6 @@ def handler(event: dict, context):
             else:
                 raise NotImplementedError()
 
-            print(record)
             logging.info("Begin processing event", write_event)
 
             # FIXME: hide under abstraction, boto3 deserialize
