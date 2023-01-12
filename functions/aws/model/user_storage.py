@@ -8,6 +8,7 @@ from boto3.dynamodb.types import TypeSerializer
 from faaskeeper.node import Node, NodeDataType
 from faaskeeper.providers.serialization import S3Reader
 from functions.aws.control.dynamo import DynamoStorage as DynamoDriver
+from functions.aws.control.redis import RedisStorage as RedisDriver
 from functions.aws.control.s3 import S3Storage as S3Driver
 
 
@@ -124,6 +125,48 @@ class DynamoStorage(Storage):
 class S3Storage(Storage):
     def __init__(self, bucket_name: str):
         self._storage = S3Driver(bucket_name)
+
+    def write(self, node: Node):
+        self._storage.write(node.path, S3Reader.serialize(node))
+        return OpResult.SUCCESS
+
+    def update(self, node: Node, updates: Set[NodeDataType] = set()):
+        # we need to download the data from storage
+        if not node.has_data or not node.has_children or not node.has_created:
+            logging.info("Start reading from S3")
+            node_data = self._storage.read(node.path)
+            logging.info("Finish reading from S3")
+            read_node = S3Reader.deserialize(
+                node.path, node_data, not node.has_data, not node.has_children
+            )
+            logging.info("Finish deserialize from S3")
+            if not node.has_data:
+                node.data = read_node.data
+            if not node.has_children:
+                node.children = read_node.children
+            if not node.has_created:
+                node.created = read_node.created
+            if not node.has_modified:
+                node.modified = read_node.modified
+        logging.info("Start writing to S3")
+        s3_data = S3Reader.serialize(node)
+        logging.info("Finish data conversion")
+        self._storage.write(node.path, s3_data)  # S3Reader.serialize(node))
+        logging.info("Finish writing to S3")
+        return OpResult.SUCCESS
+
+    def delete(self, node: Node):
+        self._storage.delete(node.path)
+
+    @property
+    def errorSupplier(self):
+        return self._storage.errorSupplier
+
+
+class RedisStorage(Storage):
+    def __init__(self):
+        self._storage = RedisDriver()
+        self._type_serializer = TypeSerializer()
 
     def write(self, node: Node):
         self._storage.write(node.path, S3Reader.serialize(node))

@@ -45,16 +45,19 @@ class Config:
         self._user_storage_type = {
             "persistent": Storage.PERSISTENT,
             "key-value": Storage.KEY_VALUE,
+            "redis": Storage.REDIS,
         }.get(environ["USER_STORAGE"])
         self._user_storage: model.UserStorage
         if self._user_storage_type == Storage.PERSISTENT:
             self._user_storage = model.UserS3Storage(
                 bucket_name=f"{self._deployment_name}-data"
             )
-        else:
+        elif self._user_storage_type == Storage.KEY_VALUE:
             self._user_storage = model.UserDynamoStorage(
                 table_name=f"{self._deployment_name}-data"
             )
+        else:
+            self._user_storage = model.UserRedisStorage()
 
         # configure system storage handle
         self._system_storage_type = {"key-value": Storage.KEY_VALUE}.get(

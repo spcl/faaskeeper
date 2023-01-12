@@ -142,7 +142,7 @@ class DynamoStorage(Storage):
             TableName=self.storage_name,
             Key={self._key_name: {"S": key}},
             ReturnConsumedCapacity="TOTAL",
-            ConsistentRead=True
+            ConsistentRead=True,
         )
         StorageStatistics.instance().add_read_units(
             ret["ConsumedCapacity"]["CapacityUnits"]
