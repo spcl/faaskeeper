@@ -9,7 +9,7 @@ from typing import Dict, Set
 import boto3
 
 from faaskeeper.stats import StorageStatistics
-from faaskeeper.watch import WatchEventType
+from faaskeeper.watch import WatchEventType, WatchType
 from functions.aws.config import Config
 from functions.aws.control.distributor_events import (
     DistributorCreateNode,
@@ -163,10 +163,18 @@ def handler(event: dict, context):
                 begin_watch = time.time()
                 # start watch delivery
                 for r in regions:
-                    if event_type == DistributorEventType.SET_DATA:
-                        watches_submitters.append(
-                            executor.submit(launch_watcher, r, watches)
+                    # if event_type == DistributorEventType.SET_DATA:
+                    #    watches_submitters.append(
+                    #        executor.submit(launch_watcher, r, watches)
+                    #    )
+                    # FIXME: other watchers
+                    # FIXME: reenable submission
+                    logging.info(
+                        region_watches[r].query_watches(
+                            operation.node.path, [WatchType.GET_DATA]
                         )
+                    )
+
                 end_watch = time.time()
                 logging.info("Finished watch dispatch")
                 for r in regions:

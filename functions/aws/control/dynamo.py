@@ -142,10 +142,13 @@ class DynamoStorage(Storage):
             TableName=self.storage_name,
             Key={self._key_name: {"S": key}},
             ReturnConsumedCapacity="TOTAL",
+            ConsistentRead=True
         )
         StorageStatistics.instance().add_read_units(
             ret["ConsumedCapacity"]["CapacityUnits"]
         )
+
+        return ret
 
     def delete(self, key: str):
         """DynamoDb delete"""
