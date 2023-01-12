@@ -108,6 +108,13 @@ functions:
               - Arn
       - Effect: Allow
         Action:
+          - dynamodb:GetItem
+        Resource:
+          - Fn::GetAtt:
+              - watchTable
+              - Arn
+      - Effect: Allow
+        Action:
           - s3:GetObject
           - s3:GetObjectAcl
           - s3:PutObject
@@ -247,7 +254,6 @@ resources:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: ${self:provider.environment.SQS_QUEUE}-client-sqs
-        FifoQueue: False
         DelaySeconds: 0
     distributeTable:
       Type: AWS::DynamoDB::Table
