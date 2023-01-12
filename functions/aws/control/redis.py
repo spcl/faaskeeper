@@ -8,7 +8,7 @@ from faaskeeper.stats import StorageStatistics
 from .storage import Storage
 
 # FIXME: configurable
-REDIS_HOST = "3.231.95.217"
+REDIS_HOST = "44.199.217.133"
 
 
 class RedisStorage(Storage):
