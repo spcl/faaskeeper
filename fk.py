@@ -91,6 +91,15 @@ def service(provider: str, config, clean: bool):
     if provider == "aws":
         aws_init(f"faaskeeper-{service_name}", config_json["deployment-region"])
 
+@deploy.command()
+@common_params
+@click.option("--clean/--no-clean", default=False)
+def init(provider: str, config, clean: bool):
+
+    config_json = json.load(config)
+    service_name = config_json["deployment-name"]
+    if provider == "aws":
+        aws_init(f"faaskeeper-{service_name}", config_json["deployment-region"])
 
 @deploy.command()
 @common_params
