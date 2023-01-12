@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import socket
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -44,7 +45,8 @@ config = Config.instance(False)
 # FIXME: configure
 regions = ["us-east-1"]
 # verbose_output = config.verbose
-verbose_output = False
+# verbose_output = False
+# FIXME: proper data structure
 region_clients = {}
 region_watches = {}
 epoch_counters: Dict[str, Set[str]] = {}
@@ -89,8 +91,7 @@ def notify(write_event: dict, ret: dict):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
             s.settimeout(2)
-            if verbose_output:
-                print("Notification", write_event)
+            logging.info("Notification", write_event)
             source_ip = get_object(write_event["sourceIP"])
             source_port = int(get_object(write_event["sourcePort"]))
             s.connect((source_ip, source_port))
@@ -106,8 +107,8 @@ def notify(write_event: dict, ret: dict):
 def handler(event: dict, context):
 
     events = event["Records"]
-    if verbose_output:
-        print(event)
+    logging.info(f"Begin processing {len(events)} events")
+
     processed_events = 0
     StorageStatistics.instance().reset()
     try:
@@ -128,6 +129,9 @@ def handler(event: dict, context):
                     }
             else:
                 raise NotImplementedError()
+
+            print(record)
+            logging.info("Begin processing event", write_event)
 
             # FIXME: hide under abstraction, boto3 deserialize
             operation: DistributorEvent
@@ -152,13 +156,13 @@ def handler(event: dict, context):
             else:
                 raise NotImplementedError()
             try:
+                logging.info(f"Prepared event", write_event)
                 begin_write = time.time()
                 # write new data
                 for r in regions:
-                    if verbose_output:
-                        print("Apply op", watches, epoch_counters[r])
                     ret = operation.execute(config.user_storage, epoch_counters[r])
                 end_write = time.time()
+                logging.info("Finished region operation")
                 begin_watch = time.time()
                 # start watch delivery
                 for r in regions:
@@ -167,10 +171,10 @@ def handler(event: dict, context):
                             executor.submit(launch_watcher, r, watches)
                         )
                 end_watch = time.time()
+                logging.info("Finished watch dispatch")
                 for r in regions:
                     epoch_counters[r].update(counters)
-                    if verbose_output:
-                        print("Applied op", epoch_counters[r])
+                logging.info("Updated epoch counters")
                 begin_notify = time.time()
                 if ret:
                     # notify client about success
@@ -182,6 +186,7 @@ def handler(event: dict, context):
                         {"status": "failure", "reason": "distributor failured"},
                     )
                 end_notify = time.time()
+                logging.info("Finished notifying the client")
             except Exception:
                 print("Failure!")
                 import traceback
@@ -190,11 +195,13 @@ def handler(event: dict, context):
                 notify(
                     write_event, {"status": "failure", "reason": "distributor failure"},
                 )
+        logging.info("Start waiting for watchers")
         begin_watch_wait = time.time()
         for f in watches_submitters:
             f.result()
         end_watch_wait = time.time()
         end = time.time()
+        logging.info("Finish waiting for watchers")
 
         global repetitions
         global sum_total

@@ -1,3 +1,4 @@
+import logging
 from enum import Enum
 from os import environ
 from typing import Optional
@@ -25,6 +26,15 @@ class Config:
         self._verbose = bool(environ["VERBOSE"])
         self._deployment_name = f"faaskeeper-{environ['DEPLOYMENT_NAME']}"
         self._deployment_region = environ["AWS_REGION"]
+
+        logging_format = "%(asctime)s,%(msecs)d %(levelname)s %(name)s: %(message)s"
+        logging_date_format = "%H:%M:%S"
+        logging.basicConfig(
+            format=logging_format,
+            datefmt=logging_date_format,
+            level=logging.INFO if self._verbose else logging.WARNING,
+            force=True,
+        )
 
         # configure user storage handle
         self._user_storage_type = {
