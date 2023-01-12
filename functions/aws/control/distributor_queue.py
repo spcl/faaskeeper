@@ -96,12 +96,13 @@ class DistributorQueueSQS(DistributorQueue):
             **event.serialize(self._type_serializer),
         }
         print("Distributor push", payload)
-        if "data" in payload:
-            binary_data = payload["data"]["B"]
-            del payload["data"]
-            attributes = {"data": {"BinaryValue": binary_data, "DataType": "Binary"}}
-        else:
-            attributes = {}
+        # if "data" in payload:
+        #    binary_data = payload["data"]["B"]
+        #    del payload["data"]
+        #    attributes = {"data": {"BinaryValue": binary_data, "DataType": "Binary"}}
+        # else:
+        #    attributes = {}
+        attributes = {}
         self._sqs_client.send_message(
             QueueUrl=self._sqs_queue_url,
             MessageBody=json.dumps(payload),

@@ -1,4 +1,3 @@
-import base64
 import json
 import logging
 import pathlib
@@ -133,7 +132,9 @@ def create_node(id: str, write_event: dict) -> Optional[dict]:
         node.created = Version(counter, None)
         node.modified = Version(counter, None)
         node.children = []
-        node.data = base64.b64decode(data)
+        # we propagate data to another queue, we should use the already
+        # base64-encoded data
+        node.data_b64 = data
 
         # FIXME: make both operations concurrently
         # unlock parent
@@ -151,10 +152,6 @@ def create_node(id: str, write_event: dict) -> Optional[dict]:
         # FIXME: distributor - make sure both have the same version
         # config.user_storage.write(node)
         # config.user_storage.update(parent_node, set([NodeDataType.CHILDREN]))
-
-        # we propagate data to another queue, we should use the already
-        # base64-encoded data
-        # node.data = data
 
         assert config.distributor_queue
         config.distributor_queue.push(
@@ -246,7 +243,7 @@ def set_data(id: str, write_event: dict) -> Optional[dict]:
 
         data = get_object(write_event["data"])
         system_node.modified = Version(counter, None)
-        system_node.data = base64.b64decode(data)
+        system_node.data_b64 = data
         logging.info(f"Finished commit preparation")
 
         begin_commit = time.time()
@@ -255,10 +252,7 @@ def set_data(id: str, write_event: dict) -> Optional[dict]:
         end_commit = time.time()
         logging.info(f"Finished commit")
 
-        # we propagate data to another queue, we should use the already
-        # base64-encoded data
         begin_push = time.time()
-        # system_node.data = data
         assert config.distributor_queue
         config.distributor_queue.push(
             write_event["timestamp"],
@@ -440,7 +434,7 @@ def handler(event: dict, context):
                 "Unknown operation {op} with ID {id}, "
                 "timestamp {timestamp}".format(
                     op=get_object(write_event["op"]),
-                    id=record["eventID"],
+                    id=event_id,
                     timestamp=write_event["timestamp"],
                 )
             )
@@ -451,7 +445,7 @@ def handler(event: dict, context):
             logging.info("Processing finished, result ", ret)
             if ret["status"] == "failure":
                 logging.error(
-                    f"Failed processing write event {record['eventID']}: {ret}"
+                    f"Failed processing write event {event_id}: {ret}"
                 )
             # Failure - notify client
             notify(write_event, ret)

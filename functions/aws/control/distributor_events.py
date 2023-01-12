@@ -61,7 +61,9 @@ class DistributorCreateNode(DistributorEvent):
             "type": serializer.serialize(self.type.value),
             "path": serializer.serialize(self.node.path),
             "counter": self.node.created.system.version,
-            "data": serializer.serialize(self.node.data),
+            # "data": serializer.serialize(self.node.data),
+            # FIXME: unify serialization
+            "data": {"B": self.node.data_b64},
             "parent_path": serializer.serialize(self.parent.path),
             "parent_children": serializer.serialize(self.parent.children),
         }
@@ -76,7 +78,8 @@ class DistributorCreateNode(DistributorEvent):
         node.modified = Version(counter, None)
         node.children = []
         # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
-        node.data = base64.b64decode(event_data["data"]["B"])
+        # node.data = base64.b64decode(event_data["data"]["B"])
+        node.data_b64 = event_data["data"]["B"]
 
         parent_node = Node(deserializer.deserialize(event_data["parent_path"]))
         parent_node.children = deserializer.deserialize(event_data["parent_children"])
@@ -126,7 +129,8 @@ class DistributorSetData(DistributorEvent):
             "type": serializer.serialize(self.type.value),
             "path": serializer.serialize(self.node.path),
             "counter": self.node.modified.system.version,
-            "data": serializer.serialize(self.node.data),
+            # FIXME: unify serialization
+            "data": {"B": self.node.data_b64},
         }
 
     @staticmethod
@@ -137,7 +141,8 @@ class DistributorSetData(DistributorEvent):
         counter = SystemCounter.from_provider_schema(event_data["counter"])
         node.modified = Version(counter, None)
         # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
-        node.data = base64.b64decode(event_data["data"]["B"])
+        # node.data = base64.b64decode(event_data["data"]["B"])
+        node.data_b64 = event_data["data"]["B"]
 
         return DistributorSetData(node)
 
@@ -187,6 +192,8 @@ class DistributorDeleteNode(DistributorEvent):
 
     @staticmethod
     def deserialize(event_data: dict):
+
+        # FIXME: custom deserializer
 
         deserializer = DistributorCreateNode._type_deserializer
         node = Node(deserializer.deserialize(event_data["path"]))

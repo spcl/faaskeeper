@@ -115,6 +115,7 @@ def handler(event: dict, context):
         begin = time.time()
         watches_submitters = []
         for record in events:
+            print(record)
             if "dynamodb" in record and record["eventName"] == "INSERT":
                 write_event = record["dynamodb"]["NewImage"]
                 event_type = DistributorEventType(int(write_event["type"]["N"]))
