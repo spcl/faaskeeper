@@ -138,3 +138,6 @@ We use Python type hints ([PEP](https://www.python.org/dev/peps/pep-0484/), [doc
 to enhance the readability of our code. When adding new interfaces and types, please use type hints.
 The linting helper `tools/linting.py` includes a call to `mypy` to check for static typing errors.
 
+## Authors
+
+* [Marcin Copik (ETH Zurich)](https://github.com/mcopik/) - main author.
