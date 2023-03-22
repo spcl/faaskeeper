@@ -38,5 +38,5 @@ execute(". {}/bin/activate && npm install -g serverless serverless-s3-remover se
 
 if not args.without_client_library:
     print("Install FaaSKeeper Python library")
-    execute(". {}/bin/activate && pip install git+ssh://git@github.com/mcopik/faaskeeper-python.git --upgrade".format(python_env_dir))
+    execute(". {}/bin/activate && pip install git+https://github.com/spcl/faaskeeper-python --upgrade".format(python_env_dir))
 
