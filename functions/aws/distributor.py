@@ -1,13 +1,15 @@
 import hashlib
 import json
+import logging
 import socket
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Set
 
 import boto3
 
 from faaskeeper.stats import StorageStatistics
-from faaskeeper.watch import WatchEventType
+from faaskeeper.watch import WatchEventType, WatchType
 from functions.aws.config import Config
 from functions.aws.control.distributor_events import (
     DistributorCreateNode,
@@ -20,7 +22,7 @@ from functions.aws.model.watches import Watches
 
 mandatory_event_fields = [
     "op" "path",
-    "user",
+    "session_id",
     "version",
     "sourceIP",
     "sourcePort",
@@ -43,7 +45,8 @@ config = Config.instance(False)
 # FIXME: configure
 regions = ["us-east-1"]
 # verbose_output = config.verbose
-verbose_output = False
+# verbose_output = False
+# FIXME: proper data structure
 region_clients = {}
 region_watches = {}
 epoch_counters: Dict[str, Set[str]] = {}
@@ -52,6 +55,13 @@ for r in regions:
     region_watches[r] = Watches(config.deployment_name, r)
     epoch_counters[r] = set()
 executor = ThreadPoolExecutor(max_workers=2 * len(regions))
+
+repetitions = 0
+sum_total = 0.0
+sum_notify = 0.0
+sum_write = 0.0
+sum_watch = 0.0
+sum_watch_wait = 0.0
 
 
 def get_object(obj: dict):
@@ -76,42 +86,51 @@ def launch_watcher(region: str, json_in: dict):
 #    return region_watches[region].get_watch_counters(node_path)
 
 
-def notify(write_event: dict, ret: dict):
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        try:
-            s.settimeout(2)
-            if verbose_output:
-                print("Notification", write_event)
-            source_ip = get_object(write_event["sourceIP"])
-            source_port = int(get_object(write_event["sourcePort"]))
-            s.connect((source_ip, source_port))
-            s.sendall(
-                json.dumps(
-                    {**ret, "event": get_object(write_event["user_timestamp"])}
-                ).encode()
-            )
-        except socket.timeout:
-            print(f"Notification of client {source_ip}:{source_port} failed!")
+# def notify(write_event: dict, ret: dict):
+#
+#    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#        try:
+#            s.settimeout(2)
+#            logging.info("Notification", write_event)
+#            source_ip = get_object(write_event["sourceIP"])
+#            source_port = int(get_object(write_event["sourcePort"]))
+#            s.connect((source_ip, source_port))
+#            s.sendall(
+#                json.dumps(
+#                    {**ret, "event": get_object(write_event["user_timestamp"])}
+#                ).encode()
+#            )
+#        except socket.timeout:
+#            print(f"Notification of client {source_ip}:{source_port} failed!")
 
 
 def handler(event: dict, context):
 
     events = event["Records"]
-    if verbose_output:
-        print(event)
+    logging.info(f"Begin processing {len(events)} events")
+
     processed_events = 0
     StorageStatistics.instance().reset()
     try:
+        begin = time.time()
         watches_submitters = []
         for record in events:
-            if record["eventName"] != "INSERT":
-                continue
+            if "dynamodb" in record and record["eventName"] == "INSERT":
+                write_event = record["dynamodb"]["NewImage"]
+                event_type = DistributorEventType(int(write_event["type"]["N"]))
+            elif "body" in record:
+                write_event = json.loads(record["body"])
+                event_type = DistributorEventType(int(write_event["type"]["N"]))
+                if "data" in record["messageAttributes"]:
+                    write_event["data"] = {
+                        "B": record["messageAttributes"]["data"]["binaryValue"]
+                    }
+            else:
+                raise NotImplementedError()
 
-            write_event = record["dynamodb"]["NewImage"]
+            logging.info("Begin processing event", write_event)
 
             # FIXME: hide under abstraction, boto3 deserialize
-            event_type = DistributorEventType(int(write_event["type"]["N"]))
             operation: DistributorEvent
             counters = []
             watches = {}
@@ -134,40 +153,98 @@ def handler(event: dict, context):
             else:
                 raise NotImplementedError()
             try:
+                logging.info(f"Prepared event", write_event)
+                begin_write = time.time()
                 # write new data
                 for r in regions:
-                    if verbose_output:
-                        print("Apply op", watches, epoch_counters[r])
                     ret = operation.execute(config.user_storage, epoch_counters[r])
+                end_write = time.time()
+                logging.info("Finished region operation")
+                begin_watch = time.time()
                 # start watch delivery
                 for r in regions:
-                    if event_type == DistributorEventType.SET_DATA:
-                        watches_submitters.append(
-                            executor.submit(launch_watcher, r, watches)
+                    # if event_type == DistributorEventType.SET_DATA:
+                    #    watches_submitters.append(
+                    #        executor.submit(launch_watcher, r, watches)
+                    #    )
+                    # FIXME: other watchers
+                    # FIXME: reenable submission
+                    logging.info(
+                        region_watches[r].query_watches(
+                            operation.node.path, [WatchType.GET_DATA]
                         )
+                    )
+
+                end_watch = time.time()
+                logging.info("Finished watch dispatch")
                 for r in regions:
                     epoch_counters[r].update(counters)
-                    if verbose_output:
-                        print("Applied op", epoch_counters[r])
+                logging.info("Updated epoch counters")
+                begin_notify = time.time()
                 if ret:
                     # notify client about success
-                    notify(write_event, ret)
+                    # notify(write_event, ret)
+                    config.client_channel.notify(
+                        operation.session_id,
+                        get_object(write_event["user_timestamp"]),
+                        write_event,
+                        ret,
+                    )
                     processed_events += 1
                 else:
-                    notify(
+                    # notify(
+                    #    write_event,
+                    #    {"status": "failure", "reason": "distributor failured"},
+                    # )
+                    config.client_channel.notify(
+                        operation.session_id,
+                        get_object(write_event["user_timestamp"]),
                         write_event,
                         {"status": "failure", "reason": "distributor failured"},
                     )
+                end_notify = time.time()
+                logging.info("Finished notifying the client")
             except Exception:
                 print("Failure!")
                 import traceback
 
                 traceback.print_exc()
-                notify(
-                    write_event, {"status": "failure", "reason": "distributor failure"},
+                # notify(
+                #    write_event, {"status": "failure", "reason": "distributor failure"},
+                # )
+                config.client_channel.notify(
+                    operation.session_id,
+                    get_object(write_event["user_timestamp"]),
+                    write_event,
+                    {"status": "failure", "reason": "distributor failured"},
                 )
+        logging.info("Start waiting for watchers")
+        begin_watch_wait = time.time()
         for f in watches_submitters:
             f.result()
+        end_watch_wait = time.time()
+        end = time.time()
+        logging.info("Finish waiting for watchers")
+
+        global repetitions
+        global sum_total
+        global sum_notify
+        global sum_write
+        global sum_watch
+        global sum_watch_wait
+        repetitions += 1
+        sum_total += end - begin
+        sum_notify += end_notify - begin_notify
+        sum_write += end_write - begin_write
+        sum_watch += end_watch - begin_watch
+        sum_watch_wait += end_watch_wait - begin_watch_wait
+        if repetitions % 100 == 0:
+            print("RESULT_TOTAL", sum_total)
+            print("RESULT_NOTIFY", sum_notify)
+            print("RESULT_WRITE", sum_write)
+            print("RESULT_WATCH_WAIT", sum_watch)
+            print("RESULT_WATCH_WAIT", sum_watch_wait)
+
     except Exception:
         print("Failure!")
         import traceback

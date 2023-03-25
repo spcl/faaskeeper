@@ -70,6 +70,7 @@ def service(provider: str, config, clean: bool):
         "FK_HEARTBEAT_FREQUENCY": str(config_json["heartbeat-frequency"]),
         "FK_WORKER_QUEUE": str(config_json["worker-queue"]),
         "FK_DISTRIBUTOR_QUEUE": str(config_json["distributor-queue"]),
+        "FK_CLIENT_CHANNEL": str(config_json["client-channel"]),
         "SLS_DEBUG": "*",
     }
     service_name = config_json["deployment-name"]
@@ -79,13 +80,13 @@ def service(provider: str, config, clean: bool):
                 f"Remove existing service {service_name} at provider: {provider}"
             )
             execute(
-                f"sls remove --stage {service_name} -c config/{provider}.yml", env=env
+                f"sls remove --stage {service_name} -c {provider}.yml", env=env
             )
         except Exception:
             logging.warn("Removing service didn't succeed!")
 
     logging.info(f"Deploy service {service_name} to provider: {provider}")
-    execute(f"sls deploy --stage {service_name} -c config/{provider}.yml", env=env)
+    execute(f"sls deploy --stage {service_name} -c {provider}.yml", env=env)
 
     if provider == "aws":
         aws_init(f"faaskeeper-{service_name}", config_json["deployment-region"])
@@ -107,6 +108,7 @@ def functions(provider: str, config, function: str):
         "FK_HEARTBEAT_FREQUENCY": str(config_json["heartbeat-frequency"]),
         "FK_WORKER_QUEUE": str(config_json["worker-queue"]),
         "FK_DISTRIBUTOR_QUEUE": str(config_json["distributor-queue"]),
+        "FK_CLIENT_CHANNEL": str(config_json["client-channel"])
     }
     service_name = config_json["deployment-name"]
     logging.info(f"Deploy functions to service {service_name} at provider: {provider}")
@@ -117,7 +119,7 @@ def functions(provider: str, config, function: str):
         functions = ["writer", "distributor", "watch", "heartbeat"]
     for func in functions:
         execute(
-            f"sls deploy --stage {service_name} --function {func} -c config/{provider}.yml",
+            f"sls deploy --stage {service_name} --function {func} -c {provider}.yml",
             env=env,
         )
 
@@ -144,10 +146,11 @@ def remove_service(provider: str, config):
         "FK_HEARTBEAT_FREQUENCY": str(config_json["heartbeat-frequency"]),
         "FK_WORKER_QUEUE": str(config_json["worker-queue"]),
         "FK_DISTRIBUTOR_QUEUE": str(config_json["distributor-queue"]),
+        "FK_CLIENT_CHANNEL": str(config_json["client-channel"])
     }
     service_name = config_json["deployment-name"]
     logging.info(f"Remove existing service {service_name} at provider: {provider}")
-    execute(f"sls remove --stage {service_name} -c config/{provider}.yml", env=env)
+    execute(f"sls remove --stage {service_name} -c {provider}.yml", env=env)
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+import logging
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Set
@@ -52,7 +53,7 @@ class DynamoStorage(Storage):
         schema: dict = {}
         # FIXME: pass epoch counter value
         if NodeDataType.DATA in updates:
-            schema = {**schema, "data": {"B": node.data}}
+            schema = {**schema, "data": {"B": node.data_b64}}
         if NodeDataType.CREATED in updates:
             schema = {
                 **schema,
@@ -131,10 +132,13 @@ class S3Storage(Storage):
     def update(self, node: Node, updates: Set[NodeDataType] = set()):
         # we need to download the data from storage
         if not node.has_data or not node.has_children or not node.has_created:
+            logging.info("Start reading from S3")
             node_data = self._storage.read(node.path)
+            logging.info("Finish reading from S3")
             read_node = S3Reader.deserialize(
                 node.path, node_data, not node.has_data, not node.has_children
             )
+            logging.info("Finish deserialize from S3")
             if not node.has_data:
                 node.data = read_node.data
             if not node.has_children:
@@ -143,7 +147,11 @@ class S3Storage(Storage):
                 node.created = read_node.created
             if not node.has_modified:
                 node.modified = read_node.modified
-        self._storage.write(node.path, S3Reader.serialize(node))
+        logging.info("Start writing to S3")
+        s3_data = S3Reader.serialize(node)
+        logging.info("Finish data conversion")
+        self._storage.write(node.path, s3_data)  # S3Reader.serialize(node))
+        logging.info("Finish writing to S3")
         return OpResult.SUCCESS
 
     def delete(self, node: Node):

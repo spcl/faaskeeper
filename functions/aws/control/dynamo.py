@@ -1,4 +1,3 @@
-import base64
 from typing import Set, Union
 
 import boto3
@@ -49,7 +48,8 @@ class DynamoStorage(Storage):
             ExpressionAttributeValues={
                 ":version": {"N": get_object(data["version"])},
                 ":inc": {"N": "1"},
-                ":data": {"B": base64.b64decode(get_object(data["data"]))},
+                # ":data": {"B": base64.b64decode(get_object(data["data"]))},
+                ":data": {"B": get_object(data["data"])},
             },
             ReturnConsumedCapacity="TOTAL",
         )
@@ -75,7 +75,7 @@ class DynamoStorage(Storage):
     def _toSchema(self, node: Node):
         # FIXME: pass epoch counter value
         schema = {
-            ":data": {"B": node.data},
+            ":data": {"B": node.data_b64},
             ":mFxidSys": node.modified.system.version,
             ":mFxidEpoch": {"NS": ["0"]},
         }
@@ -89,7 +89,7 @@ class DynamoStorage(Storage):
         attribute_names = {"#P": "path"}
         # FIXME: pass epoch counter value
         if NodeDataType.DATA in updates:
-            schema[":data"] = {"B": node.data}
+            schema[":data"] = {"B": node.data_b64}
             update_expr = f"{update_expr} #D = :data,"
             attribute_names["#D"] = "data"
         if NodeDataType.CREATED in updates:
@@ -142,10 +142,13 @@ class DynamoStorage(Storage):
             TableName=self.storage_name,
             Key={self._key_name: {"S": key}},
             ReturnConsumedCapacity="TOTAL",
+            ConsistentRead=True
         )
         StorageStatistics.instance().add_read_units(
             ret["ConsumedCapacity"]["CapacityUnits"]
         )
+
+        return ret
 
     def delete(self, key: str):
         """DynamoDb delete"""

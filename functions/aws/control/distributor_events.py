@@ -18,6 +18,13 @@ class DistributorEventType(IntEnum):
 
 
 class DistributorEvent(ABC):
+    def __init__(self, session_id: str):
+        self._session_id = session_id
+
+    @property
+    def session_id(self) -> str:
+        return self._session_id
+
     @abstractmethod
     def serialize(self, serializer) -> dict:
         pass
@@ -48,7 +55,8 @@ class DistributorCreateNode(DistributorEvent):
 
     _type_deserializer = TypeDeserializer()
 
-    def __init__(self, node: Node, parent_node: Node):
+    def __init__(self, session_id: str, node: Node, parent_node: Node):
+        super().__init__(session_id)
         self._node = node
         self._parent_node = parent_node
 
@@ -57,11 +65,15 @@ class DistributorCreateNode(DistributorEvent):
             IP and port are already serialized.
         """
 
+        # FIXME: unify serialization - proper binary type for b64-encoded
+        # FIXME: dynamodb vs sqs serialization
         return {
             "type": serializer.serialize(self.type.value),
+            "session_id": serializer.serialize(self.session_id),
             "path": serializer.serialize(self.node.path),
             "counter": self.node.created.system.version,
-            "data": serializer.serialize(self.node.data),
+            # "data": serializer.serialize(self.node.data),
+            "data": {"B": self.node.data_b64},
             "parent_path": serializer.serialize(self.parent.path),
             "parent_children": serializer.serialize(self.parent.children),
         }
@@ -75,12 +87,16 @@ class DistributorCreateNode(DistributorEvent):
         node.created = Version(counter, None)
         node.modified = Version(counter, None)
         node.children = []
-        node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
+        # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
+        # node.data = base64.b64decode(event_data["data"]["B"])
+        node.data_b64 = event_data["data"]["B"]
 
         parent_node = Node(deserializer.deserialize(event_data["parent_path"]))
         parent_node.children = deserializer.deserialize(event_data["parent_children"])
 
-        return DistributorCreateNode(node, parent_node)
+        session_id = deserializer.deserialize(event_data["session_id"])
+
+        return DistributorCreateNode(session_id, node, parent_node)
 
     def execute(
         self, user_storage: UserStorage, epoch_counters: Set[str]
@@ -114,7 +130,8 @@ class DistributorSetData(DistributorEvent):
 
     _type_deserializer = TypeDeserializer()
 
-    def __init__(self, node: Node):
+    def __init__(self, session_id: str, node: Node):
+        super().__init__(session_id)
         self._node = node
 
     def serialize(self, serializer) -> dict:
@@ -123,9 +140,11 @@ class DistributorSetData(DistributorEvent):
         """
         return {
             "type": serializer.serialize(self.type.value),
+            "session_id": serializer.serialize(self.session_id),
             "path": serializer.serialize(self.node.path),
             "counter": self.node.modified.system.version,
-            "data": serializer.serialize(self.node.data),
+            # FIXME: unify serialization
+            "data": {"B": self.node.data_b64},
         }
 
     @staticmethod
@@ -135,9 +154,13 @@ class DistributorSetData(DistributorEvent):
         node = Node(deserializer.deserialize(event_data["path"]))
         counter = SystemCounter.from_provider_schema(event_data["counter"])
         node.modified = Version(counter, None)
-        node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
+        # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
+        # node.data = base64.b64decode(event_data["data"]["B"])
+        node.data_b64 = event_data["data"]["B"]
 
-        return DistributorSetData(node)
+        session_id = deserializer.deserialize(event_data["session_id"])
+
+        return DistributorSetData(session_id, node)
 
     def execute(
         self, user_storage: UserStorage, epoch_counters: Set[str]
@@ -168,7 +191,8 @@ class DistributorDeleteNode(DistributorEvent):
 
     _type_deserializer = TypeDeserializer()
 
-    def __init__(self, node: Node, parent_node: Node):
+    def __init__(self, session_id: str, node: Node, parent_node: Node):
+        super().__init__(session_id)
         self._node = node
         self._parent_node = parent_node
 
@@ -178,6 +202,7 @@ class DistributorDeleteNode(DistributorEvent):
         """
         return {
             "type": serializer.serialize(self.type.value),
+            "session_id": serializer.serialize(self.session_id),
             "path": serializer.serialize(self.node.path),
             "parent_path": serializer.serialize(self.parent.path),
             "parent_children": serializer.serialize(self.parent.children),
@@ -186,13 +211,17 @@ class DistributorDeleteNode(DistributorEvent):
     @staticmethod
     def deserialize(event_data: dict):
 
+        # FIXME: custom deserializer
+
         deserializer = DistributorCreateNode._type_deserializer
         node = Node(deserializer.deserialize(event_data["path"]))
 
         parent_node = Node(deserializer.deserialize(event_data["parent_path"]))
         parent_node.children = deserializer.deserialize(event_data["parent_children"])
 
-        return DistributorDeleteNode(node, parent_node)
+        session_id = deserializer.deserialize(event_data["session_id"])
+
+        return DistributorDeleteNode(session_id, node, parent_node)
 
     def execute(
         self, user_storage: UserStorage, epoch_counters: Set[str]

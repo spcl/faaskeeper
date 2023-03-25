@@ -17,6 +17,26 @@ class Watches:
             WatchType.GET_CHILDREN: "getChildrenID",
         }
 
+    def query_watches(self, node_path: str, counters: List[WatchType]):
+        try:
+
+            ret = self._storage.read(node_path)
+
+            data = []
+            if "Attributes" in ret:
+                for c in counters:
+                    data.append(
+                        (
+                            c,
+                            self._type_deserializer.deserialize(
+                                ret["Attributes"][self._counters.get(c)]
+                            ),
+                        )
+                    )
+            return data
+        except self._storage.errorSupplier.ResourceNotFoundException:
+            return []
+
     def get_watches(self, node_path: str, counters: List[WatchType]):
         try:
             # we always commit the modified stamp

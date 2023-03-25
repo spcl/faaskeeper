@@ -1,4 +1,5 @@
 service: faaskeeper
+projectDir: ../
 
 provider:
   name: aws
@@ -6,6 +7,7 @@ provider:
   stage: dev
   region: ${env:FK_DEPLOYMENT_REGION}
   environment:
+    SQS_QUEUE: ${self:service}-${opt:stage, self:provider.stage}
     DYNAMODB_TABLE: ${self:service}-${opt:stage, self:provider.stage}
     S3_BUCKET:      ${self:service}-${opt:stage, self:provider.stage}
 
@@ -29,6 +31,8 @@ functions:
       USER_STORAGE: ${env:FK_USER_STORAGE}
       SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
       DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
+      CLIENT_CHANNEL: ${env:FK_CLIENT_CHANNEL}
+      QUEUE_PREFIX: ${self:service}-${opt:stage, self:provider.stage}
     iamRoleStatements:
       - Effect: Allow
         Action:
@@ -36,6 +40,7 @@ functions:
           - dynamodb:PutItem
           - dynamodb:UpdateItem
           - dynamodb:DeleteItem
+          - sqs:*
         Resource:
           - Fn::GetAtt:
               - dataTable
@@ -49,6 +54,9 @@ functions:
           - Fn::GetAtt:
               - distributeTable
               - Arn
+          - Fn::GetAtt:
+              - distributorQueue
+              - Arn
     events:
       - stream:
           type: dynamodb
@@ -59,6 +67,13 @@ functions:
             Fn::GetAtt:
               - writerTable
               - StreamArn
+      - sqs:
+          batchSize: 10
+          maximumBatchingWindow: 0
+          arn:
+            Fn::GetAtt:
+              - writerQueue
+              - Arn
   distributor:
     handler: functions/aws/distributor.handler
     environment:
@@ -68,6 +83,8 @@ functions:
       USER_STORAGE: ${env:FK_USER_STORAGE}
       SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
       DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
+      CLIENT_CHANNEL: ${env:FK_CLIENT_CHANNEL}
+      QUEUE_PREFIX: ${self:service}-${opt:stage, self:provider.stage}
     iamRoleStatements:
       - Effect: Allow
         Action:
@@ -88,6 +105,13 @@ functions:
               - Arn
           - Fn::GetAtt:
               - distributeTable
+              - Arn
+      - Effect: Allow
+        Action:
+          - dynamodb:GetItem
+        Resource:
+          - Fn::GetAtt:
+              - watchTable
               - Arn
       - Effect: Allow
         Action:
@@ -113,6 +137,14 @@ functions:
             Fn::GetAtt:
               - distributeTable
               - StreamArn
+      - sqs:
+          batchSize: 10
+          maximumBatchingWindow: 0
+          arn:
+            Fn::GetAtt:
+              - distributorQueue
+              - Arn
+
   watch:
     handler: functions/aws/watch.handler
     environment:
@@ -206,6 +238,23 @@ resources:
             KeyType: RANGE
         StreamSpecification:
           StreamViewType: NEW_IMAGE
+    writerQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:provider.environment.SQS_QUEUE}-writer-sqs.fifo
+        FifoQueue: True
+        DelaySeconds: 0
+    distributorQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:provider.environment.SQS_QUEUE}-distributor-sqs.fifo
+        FifoQueue: True
+        DelaySeconds: 0
+    clientQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:provider.environment.SQS_QUEUE}-client-sqs
+        DelaySeconds: 0
     distributeTable:
       Type: AWS::DynamoDB::Table
       Properties:

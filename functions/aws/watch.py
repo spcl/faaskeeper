@@ -49,6 +49,9 @@ def handler(event: dict, context: dict):
                         # FIXME: actual notification
         else:
             raise NotImplementedError()
+
+        # FIXME: remove watches from DynamoDB
+
     except Exception:
         print("Failure!")
         import traceback
