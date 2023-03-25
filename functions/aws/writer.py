@@ -428,8 +428,6 @@ def handler(event: dict, context):
         else:
             raise NotImplementedError()
 
-        logging.info(record)
-        logging.info(f"Begin processing event {write_event}")
         op = get_object(write_event["op"])
         if op not in ops:
             logging.error(
@@ -444,7 +442,6 @@ def handler(event: dict, context):
 
         ret = ops[op](event_id, write_event)
         if ret:
-            logging.info("Processing finished, result ", ret)
             if ret["status"] == "failure":
                 logging.error(f"Failed processing write event {event_id}: {ret}")
             # Failure - notify client
