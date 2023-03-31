@@ -3,6 +3,7 @@ import json
 import logging
 import socket
 import time
+import base64
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Set
 
@@ -118,6 +119,15 @@ def handler(event: dict, context):
             if "dynamodb" in record and record["eventName"] == "INSERT":
                 write_event = record["dynamodb"]["NewImage"]
                 event_type = DistributorEventType(int(write_event["type"]["N"]))
+
+                # when launching from a trigger, the binary vlaue is not automatically base64 decoded
+                # however, we can't put base64 encoded data to boto3 - it ALWAYS applies encoding,
+                # regardless of the format of data
+                # https://github.com/boto/boto3/issues/3291
+                # https://github.com/aws/aws-cli/issues/1097
+                #if "data" in write_event:
+                #    write_event["data"]["B"] = base64.b64decode(write_event["data"]["B"])
+
             elif "body" in record:
                 write_event = json.loads(record["body"])
                 event_type = DistributorEventType(int(write_event["type"]["N"]))

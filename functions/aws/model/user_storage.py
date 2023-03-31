@@ -53,7 +53,7 @@ class DynamoStorage(Storage):
         schema: dict = {}
         # FIXME: pass epoch counter value
         if NodeDataType.DATA in updates:
-            schema = {**schema, "data": {"B": node.data_b64}}
+            schema = {**schema, "data": {"B": node.data}}
         if NodeDataType.CREATED in updates:
             schema = {
                 **schema,
