@@ -7,7 +7,7 @@
   "user-storage": "persistent",
   "system-storage": "key-value",
   "heartbeat-frequency": 12,
-  "worker-queue": "dynamodb",
-  "distributor-queue": "dynamodb",
+  "worker-queue": "sqs",
+  "distributor-queue": "sqs",
   "client-channel": "tcp"
 }

@@ -60,23 +60,28 @@ class DistributorCreateNode(DistributorEvent):
         self._node = node
         self._parent_node = parent_node
 
-    def serialize(self, serializer) -> dict:
+    def serialize(self, serializer, base64_encoded = True) -> dict:
         """We must use JSON.
             IP and port are already serialized.
         """
 
         # FIXME: unify serialization - proper binary type for b64-encoded
         # FIXME: dynamodb vs sqs serialization
-        return {
+        data = {
             "type": serializer.serialize(self.type.value),
             "session_id": serializer.serialize(self.session_id),
             "path": serializer.serialize(self.node.path),
             "counter": self.node.created.system.version,
-            # "data": serializer.serialize(self.node.data),
-            "data": {"B": self.node.data_b64},
             "parent_path": serializer.serialize(self.parent.path),
             "parent_children": serializer.serialize(self.parent.children),
         }
+
+        if base64_encoded:
+            data["data"] = {"B": self.node.data_b64}
+        else:
+            data["data"] = {"B": base64.b64decode(self.node.data_b64)}
+
+        return data
 
     @staticmethod
     def deserialize(event_data: dict):
@@ -134,18 +139,23 @@ class DistributorSetData(DistributorEvent):
         super().__init__(session_id)
         self._node = node
 
-    def serialize(self, serializer) -> dict:
+    def serialize(self, serializer, base64_encoded = True) -> dict:
         """We must use JSON.
             IP and port are already serialized.
         """
-        return {
+        data = {
             "type": serializer.serialize(self.type.value),
             "session_id": serializer.serialize(self.session_id),
             "path": serializer.serialize(self.node.path),
             "counter": self.node.modified.system.version,
-            # FIXME: unify serialization
-            "data": {"B": self.node.data_b64},
         }
+
+        if base64_encoded:
+            data["data"] = {"B": self.node.data_b64}
+        else:
+            data["data"] = base64.b64decode(self.node.data_b64)
+
+        return data
 
     @staticmethod
     def deserialize(event_data: dict):
@@ -196,7 +206,7 @@ class DistributorDeleteNode(DistributorEvent):
         self._node = node
         self._parent_node = parent_node
 
-    def serialize(self, serializer) -> dict:
+    def serialize(self, serializer, base64_encoded = True) -> dict:
         """We must use JSON.
             IP and port are already serialized.
         """

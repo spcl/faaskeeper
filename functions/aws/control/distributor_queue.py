@@ -41,6 +41,15 @@ class DistributorQueueDynamo(DistributorQueue):
             We must use a single shard - everything is serialized.
         """
         counter_val = counter.sum
+
+        # when launching from a Dynamo trigger, the binary value is not automatically base64 decoded
+        # however, we can't put base64 encoded data to boto3 - it ALWAYS applies encoding,
+        # regardless of the format of data
+        # https://github.com/boto/boto3/issues/3291
+        # https://github.com/aws/aws-cli/issues/1097
+        #
+        # thus, we need to decode the value first
+
         self._queue.write(
             "",
             {
@@ -49,7 +58,7 @@ class DistributorQueueDynamo(DistributorQueue):
                 "sourceIP": ip,
                 "sourcePort": port,
                 "user_timestamp": user_timestamp,
-                **event.serialize(self._type_serializer),
+                **event.serialize(self._type_serializer, base64_encoded=False),
             },
         )
 
