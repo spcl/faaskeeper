@@ -67,6 +67,27 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
         if cmd == "logs":
             click.echo_via_pager(client.logs())
         return client.session_status, client.session_id
+    
+    # internal parsing the args
+    if len(args) == 2:
+        args.append('False')
+        args.append('False')
+
+    if len(args) == 3:
+        for arg in args[2:]:
+            if arg in ("-e", "--ephemeral"):
+                args[2] = 'True'
+                args.append('False')
+            elif arg in ("-s", "--sequential"):
+                args[2] = 'False'
+                args.append('True') 
+
+    if len(args) == 4:
+        for arg in args[2:]:
+            if arg in ("-e", "--ephemeral"):
+                args[2] = 'True'
+            elif arg in ("-s", "--sequential"):
+                args[3] = 'True'
 
     # create mapping
     function = getattr(client, clientAPIMapping[cmd])
