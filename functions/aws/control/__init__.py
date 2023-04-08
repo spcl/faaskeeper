@@ -1,4 +1,4 @@
-from .channel import ClientChannel, ClientChannelTCP  # noqa
+from .channel import ClientChannel, ClientChannelTCP , ClientChannelSQS  # noqa
 from .distributor_queue import (  # noqa
     DistributorQueue,
     DistributorQueueDynamo,

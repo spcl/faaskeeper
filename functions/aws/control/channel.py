@@ -1,10 +1,11 @@
 import json
 import logging
+import os
 import socket
 from abc import ABC, abstractmethod
 from typing import Dict
-
 import boto3
+from botocore.exceptions import ClientError
 
 
 class ClientChannel(ABC):
@@ -60,3 +61,45 @@ class ClientChannelTCP(ClientChannel):
             )
         except socket.timeout:
             logging.error(f"Notification of client {user} failed!")
+
+
+class ClientChannelSQS(ClientChannel):
+    def __init__(self):
+        self._sqs = boto3.client('sqs', region_name=os.environ["AWS_REGION"])
+        self.queue_name = f"faaskeeper-{os.environ['DEPLOYMENT_NAME']}-client-sqs"
+
+    def get_queue(self, name):
+        """
+        Gets an SQS queue by name.
+        """
+        try:
+            queue = self._sqs.get_queue_url(QueueName=self.queue_name)
+            logging.info("Got queue '%s' with URL=%s", self.queue_name, queue['QueueUrl'])
+        except ClientError as error:
+            logging.exception("Couldn't get queue named %s.", self.queue_name)
+            raise error
+        else:
+            return queue
+
+    def notify(self, user: str, event: str, write_event: dict, ret: dict):
+        queue = self.get_queue("clientQueue")
+        try:
+            response = self._sqs.send_message(
+                QueueUrl=queue["QueueUrl"],
+                MessageAttributes={"user": {
+                    "StringValue": user,
+                    "DataType": "String"
+                },
+                    "write_event": {
+                        "StringValue": json.dumps(write_event),
+                        "DataType": "String"
+                    }
+                },
+                MessageBody=json.dumps(
+                    {**ret, "event": event}
+                    # get_object(write_event["timestamp"])}
+                ),
+            )
+        except ClientError as error:
+            logging.error(f"Notification of client {user} failed!")
+            raise error
