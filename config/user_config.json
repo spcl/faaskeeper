@@ -2,12 +2,12 @@
   "verbose": true,
   "cloud-provider": "aws",
   "port": 5000,
-  "deployment-name": "dev",
+  "deployment-name": "devv",
   "deployment-region": "us-east-1",
   "user-storage": "persistent",
   "system-storage": "key-value",
   "heartbeat-frequency": 12,
   "worker-queue": "dynamodb",
   "distributor-queue": "dynamodb",
-  "client-channel": "tcp"
+  "client-channel": "sqs"
 }

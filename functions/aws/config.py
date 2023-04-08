@@ -91,6 +91,8 @@ class Config:
         }.get(environ["CLIENT_CHANNEL"])
         if self._client_channel_type == ChannelType.TCP:
             self._client_channel = control.ClientChannelTCP()
+        elif self._client_channel_type == ChannelType.SQS:
+            self._client_channel = control.ClientChannelSQS()
         else:
             raise RuntimeError("Not implemented!")
 
