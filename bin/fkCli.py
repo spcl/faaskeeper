@@ -137,70 +137,33 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
     return client.session_status, client.session_id
 
 
+def create_node(**kwargs):
+    print("create_node called with arguments:", kwargs)
+
+def get_data(**kwargs):
+    print("get_data called with arguments:", kwargs)
+
+def set_data(**kwargs):
+    print("set_data called with arguments:", kwargs)
+
 @click.command()
-@click.argument("config", type=click.File("r"))
-@click.option("--port", type=int, default=-1)
-@click.option("--verbose/--no-verbose", type=bool, default=False)
-def cli(config, port: int, verbose: str):
-    session = PromptSession(
-        completer=fkCompleter,
-        history=FileHistory("fk_history.txt"),
-        auto_suggest=AutoSuggestFromHistory(),
-    )
+@click.option("--command", required=True, type=click.Choice(["create", "get_data", "set_data"]))
+@click.option("--name", required=False)
+@click.option("--data", required=False)
+@click.option("--ip", required=False)
+@click.option("--port", required=False)
+def process_command(command, name=None, data=None, ip=None, port=None):
+    if command == "create":
+        create_node(name=name, data=data)
+    elif command == "get_data":
+        get_data(name=name)
+    elif command == "set_data":
+        set_data(name=name, data=data)
+    elif command == "connect":
+        print("connect called with arguments:", ip, port)
+    else:
+        click.echo(f"Invalid command: {command}")
 
-    status = "DISCONNECTED"
-    counter = 0
-    session_id = None
-    cfg = Config.deserialize(json.load(config))
-    provider = CloudProvider.serialize(cfg.cloud_provider)
-    service_name = f"faaskeeper-{cfg.deployment_name}"
-    try:
-        client = FaaSKeeperClient(cfg, port, verbose)
-        client.start()
-        status = "CONNECTED"
-        session_id = client.session_id
-    # FIXME: FK exceptions
-    except Exception as e:
-        click.echo("Unable to connect")
-        click.echo(e)
-        import traceback
-        traceback.print_exc()
-
-    while True:
-        try:
-            text = session.prompt(
-                f"[fk: {datetime.now()} {provider}:{service_name}({status}) "
-                f"session:{session_id} {counter}] "
-            )
-        except KeyboardInterrupt:
-            continue
-        except EOFError:
-            break
-
-        cmds = text.split()
-        if len(cmds) == 0:
-            continue
-
-        cmd = cmds[0]
-        if cmd == "quit":
-            break
-        elif cmd == "help":
-            click.echo("Available commands")
-            click.echo(keywords)
-        elif cmd not in keywords:
-            click.echo(f"Unknown command {text}")
-        else:
-            status, session_id = process_cmd(client, cmd, cmds[1:])
-        counter += 1
-
-    print("Closing...")
-    try:
-        client.stop()
-    except Exception as e:
-        click.echo("Unable to close the session")
-        click.echo(e)
-
-    print("Session closed correctly.")
 
 
 if __name__ == "__main__":
