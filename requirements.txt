@@ -7,7 +7,8 @@ black==19.10b0
 flake8-black==0.1.2
 mypy==0.761
 mypy-boto3==1.13.24.2
-boto3-stubs[lambda,dynamodb]
+boto3-stubs[lambda]
+boto3-stubs[dynamodb]
 prompt_toolkit
 isort
 pytest
