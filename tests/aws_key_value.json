@@ -8,5 +8,6 @@
   "system-storage": "key-value",
   "heartbeat-frequency": 12,
   "worker-queue": "key-value",
-  "distributor-queue": "dynamodb"
+  "distributor-queue": "dynamodb",
+  "client-channel": "tcp"
 }
