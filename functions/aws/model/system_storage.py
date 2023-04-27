@@ -158,7 +158,7 @@ class DynamoStorage(Storage):
                 update_values[":modifiedStamp"] = node.modified.system.version
             if NodeDataType.CHILDREN in updates:
                 update_expr = f"{update_expr} children = :children,"
-                update_values[":children"] = self._type_serializer.serialize(
+                update_values[":children"] = self._type_serializer.serialize(  # type: ignore
                     node.children  # type: ignore
                 )
             # strip traling comma - boto3 will not accept that
