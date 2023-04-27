@@ -1,5 +1,5 @@
 boto3==1.11.6
-clock==8.0.2
+click==8.0.2
 #linting
 flake8==3.7.9
 flake8-boto3==0.3.0
