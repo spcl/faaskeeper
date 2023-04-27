@@ -26,7 +26,7 @@ class DistributorEvent(ABC):
         return self._session_id
 
     @abstractmethod
-    def serialize(self, serializer) -> dict:
+    def serialize(self, serializer, base64_encoded=True) -> dict:
         pass
 
     @staticmethod
@@ -60,7 +60,7 @@ class DistributorCreateNode(DistributorEvent):
         self._node = node
         self._parent_node = parent_node
 
-    def serialize(self, serializer, base64_encoded = True) -> dict:
+    def serialize(self, serializer, base64_encoded=True) -> dict:
         """We must use JSON.
             IP and port are already serialized.
         """
@@ -139,7 +139,7 @@ class DistributorSetData(DistributorEvent):
         super().__init__(session_id)
         self._node = node
 
-    def serialize(self, serializer, base64_encoded = True) -> dict:
+    def serialize(self, serializer, base64_encoded=True) -> dict:
         """We must use JSON.
             IP and port are already serialized.
         """
@@ -206,7 +206,7 @@ class DistributorDeleteNode(DistributorEvent):
         self._node = node
         self._parent_node = parent_node
 
-    def serialize(self, serializer, base64_encoded = True) -> dict:
+    def serialize(self, serializer, base64_encoded=True) -> dict:
         """We must use JSON.
             IP and port are already serialized.
         """

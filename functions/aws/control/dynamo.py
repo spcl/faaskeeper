@@ -22,7 +22,7 @@ class DynamoStorage(Storage):
         # Completely replace the existing data
         ret = self._dynamodb.put_item(
             TableName=self.storage_name,
-            Item=data,
+            Item=data,  # type: ignore
             # ExpressionAttributeNames={"#P": self._key_name},
             # ConditionExpression="attribute_not_exists(#P)",
             ReturnConsumedCapacity="TOTAL",
@@ -142,7 +142,7 @@ class DynamoStorage(Storage):
             TableName=self.storage_name,
             Key={self._key_name: {"S": key}},
             ReturnConsumedCapacity="TOTAL",
-            ConsistentRead=True
+            ConsistentRead=True,
         )
         StorageStatistics.instance().add_read_units(
             ret["ConsumedCapacity"]["CapacityUnits"]

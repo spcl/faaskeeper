@@ -38,7 +38,7 @@ class Config:
             format=logging_format,
             datefmt=logging_date_format,
             level=logging.INFO if self._verbose else logging.WARNING,
-            force=True,
+            # force=True,
         )
 
         # configure user storage handle

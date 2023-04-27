@@ -2,9 +2,6 @@ import json
 import logging
 import socket
 from abc import ABC, abstractmethod
-from typing import Dict
-
-import boto3
 
 
 class ClientChannel(ABC):
@@ -40,7 +37,8 @@ class ClientChannelTCP(ClientChannel):
                 logging.error(f"Connection to client {source_ip}:{source_port} failed!")
             except OSError as e:
                 logging.error(
-                    f"Connection to client {source_ip}:{source_port} failed! Reason {e.strerror}"
+                    f"Connection to client {source_ip}:{source_port} failed! "
+                    f"Reason {e.strerror}"
                 )
 
         return sock

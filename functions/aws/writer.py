@@ -2,7 +2,6 @@ import json
 import logging
 import pathlib
 import time
-import base64
 from datetime import datetime
 from time import sleep
 from typing import Callable, Dict, List, Optional

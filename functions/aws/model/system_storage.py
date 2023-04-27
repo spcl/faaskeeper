@@ -100,13 +100,19 @@ class DynamoStorage(Storage):
             # node already exists
             if "cFxidSys" in data:
                 n = Node(path)
+                created = SystemCounter.from_provider_schema(
+                    data["cFxidSys"]  # type: ignore
+                )
                 n.created = Version(
-                    SystemCounter.from_provider_schema(data["cFxidSys"]),
+                    created,
                     None
                     # EpochCounter.from_provider_schema(data["cFxidEpoch"]),
                 )
+                modified = SystemCounter.from_provider_schema(
+                    data["mFxidSys"]  # type: ignore
+                )
                 n.modified = Version(
-                    SystemCounter.from_provider_schema(data["mFxidSys"]),
+                    modified,
                     None
                     # EpochCounter.from_provider_schema(data["mFxidEpoch"]),
                 )
@@ -153,7 +159,7 @@ class DynamoStorage(Storage):
             if NodeDataType.CHILDREN in updates:
                 update_expr = f"{update_expr} children = :children,"
                 update_values[":children"] = self._type_serializer.serialize(
-                    node.children
+                    node.children  # type: ignore
                 )
             # strip traling comma - boto3 will not accept that
             update_expr = update_expr[:-1]
@@ -200,7 +206,9 @@ class DynamoStorage(Storage):
             StorageStatistics.instance().add_write_units(
                 ret["ConsumedCapacity"]["CapacityUnits"]
             )
-            return SystemCounter.from_provider_schema(ret["Attributes"]["cFxidSys"])
+            return SystemCounter.from_provider_schema(
+                ret["Attributes"]["cFxidSys"]  # type: ignore
+            )
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return None
 

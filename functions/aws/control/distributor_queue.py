@@ -42,8 +42,10 @@ class DistributorQueueDynamo(DistributorQueue):
         """
         counter_val = counter.sum
 
-        # when launching from a Dynamo trigger, the binary value is not automatically base64 decoded
-        # however, we can't put base64 encoded data to boto3 - it ALWAYS applies encoding,
+        # when launching from a Dynamo trigger, the binary value
+        # is not automatically base64 decoded
+        # however, we can't put base64 encoded data to boto3:
+        # it ALWAYS applies encoding,
         # regardless of the format of data
         # https://github.com/boto/boto3/issues/3291
         # https://github.com/aws/aws-cli/issues/1097
@@ -97,7 +99,7 @@ class DistributorQueueSQS(DistributorQueue):
         #    attributes = {"data": {"BinaryValue": binary_data, "DataType": "Binary"}}
         # else:
         #    attributes = {}
-        attributes = {}
+        attributes: dict = {}
         self._sqs_client.send_message(
             QueueUrl=self._sqs_queue_url,
             MessageBody=json.dumps(payload),

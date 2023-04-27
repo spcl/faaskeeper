@@ -1,11 +1,9 @@
 import hashlib
 import json
 import logging
-import socket
 import time
-import base64
-from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Set
+from concurrent.futures import Future, ThreadPoolExecutor
+from typing import Dict, List, Set
 
 import boto3
 
@@ -114,19 +112,23 @@ def handler(event: dict, context):
     StorageStatistics.instance().reset()
     try:
         begin = time.time()
-        watches_submitters = []
+        watches_submitters: List[Future] = []
         for record in events:
             if "dynamodb" in record and record["eventName"] == "INSERT":
                 write_event = record["dynamodb"]["NewImage"]
                 event_type = DistributorEventType(int(write_event["type"]["N"]))
 
-                # when launching from a trigger, the binary vlaue is not automatically base64 decoded
-                # however, we can't put base64 encoded data to boto3 - it ALWAYS applies encoding,
+                # when launching from a trigger, the binary vlaue is not
+                # automatically base64 decoded
+                # however, we can't put base64 encoded data to boto3:
+                # it ALWAYS applies encoding,
                 # regardless of the format of data
                 # https://github.com/boto/boto3/issues/3291
                 # https://github.com/aws/aws-cli/issues/1097
-                #if "data" in write_event:
-                #    write_event["data"]["B"] = base64.b64decode(write_event["data"]["B"])
+                # if "data" in write_event:
+                #    write_event["data"]["B"] = base64.b64decode(
+                #       write_event["data"]["B"]
+                #    )
 
             elif "body" in record:
                 write_event = json.loads(record["body"])
@@ -138,11 +140,9 @@ def handler(event: dict, context):
             else:
                 raise NotImplementedError()
 
-
             # FIXME: hide under abstraction, boto3 deserialize
             operation: DistributorEvent
             counters = []
-            watches = {}
             if event_type == DistributorEventType.CREATE_NODE:
                 operation = DistributorCreateNode.deserialize(write_event)
             elif event_type == DistributorEventType.SET_DATA:
@@ -152,11 +152,6 @@ def handler(event: dict, context):
                     f"{hashed_path}_{WatchEventType.NODE_DATA_CHANGED.value}"
                     f"_{operation.node.modified.system.sum}"
                 )
-                watches = {
-                    "path": operation.node.path,
-                    "event": WatchEventType.NODE_DATA_CHANGED.value,
-                    "timestamp": operation.node.modified.system.sum,
-                }
             elif event_type == DistributorEventType.DELETE_NODE:
                 operation = DistributorDeleteNode.deserialize(write_event)
             else:
@@ -176,6 +171,8 @@ def handler(event: dict, context):
                     #    )
                     # FIXME: other watchers
                     # FIXME: reenable submission
+                    # Query watches from DynaamoDB to decide later
+                    # if they should even be scheduled.
                     region_watches[r].query_watches(
                         operation.node.path, [WatchType.GET_DATA]
                     )
@@ -186,7 +183,6 @@ def handler(event: dict, context):
                 begin_notify = time.time()
                 if ret:
                     # notify client about success
-                    # notify(write_event, ret)
                     config.client_channel.notify(
                         operation.session_id,
                         get_object(write_event["user_timestamp"]),
@@ -195,10 +191,6 @@ def handler(event: dict, context):
                     )
                     processed_events += 1
                 else:
-                    # notify(
-                    #    write_event,
-                    #    {"status": "failure", "reason": "distributor failured"},
-                    # )
                     config.client_channel.notify(
                         operation.session_id,
                         get_object(write_event["user_timestamp"]),
@@ -211,9 +203,6 @@ def handler(event: dict, context):
                 import traceback
 
                 traceback.print_exc()
-                # notify(
-                #    write_event, {"status": "failure", "reason": "distributor failure"},
-                # )
                 config.client_channel.notify(
                     operation.session_id,
                     get_object(write_event["user_timestamp"]),
