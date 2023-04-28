@@ -153,7 +153,7 @@ class DistributorSetData(DistributorEvent):
         if base64_encoded:
             data["data"] = {"B": self.node.data_b64}
         else:
-            data["data"] = base64.b64decode(self.node.data_b64)
+            data["data"] = {"B": base64.b64decode(self.node.data_b64)}
 
         return data
 
