@@ -300,12 +300,12 @@ resources:
         BucketName: ${self:provider.environment.S3_BUCKET}-data
 
 plugins:
-  - serverless-s3-remover
+  - serverless-s3-cleaner
   - serverless-python-requirements
   - serverless-iam-roles-per-function
 
 custom:
-  remover:
+  serverless-s3-cleaner:
     buckets:
       - ${self:provider.environment.S3_BUCKET}-data
   pythonRequirements:

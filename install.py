@@ -34,7 +34,7 @@ print("Creating Node virtualenv at {}".format(python_env_dir))
 execute(". {}/bin/activate && nodeenv -p".format(python_env_dir))
 
 print("Install Node dependencies with npm")
-execute(". {}/bin/activate && npm install -g serverless serverless-s3-remover serverless-python-requirements serverless-iam-roles-per-function".format(python_env_dir))
+execute(". {}/bin/activate && npm install -g serverless serverless-s3-cleaner serverless-python-requirements serverless-iam-roles-per-function".format(python_env_dir))
 
 if not args.without_client_library:
     print("Install FaaSKeeper Python library")
