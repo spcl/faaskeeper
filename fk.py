@@ -82,8 +82,9 @@ def service(provider: str, config, clean: bool):
             execute(
                 f"sls remove --stage {service_name} -c {provider}.yml", env=env
             )
-        except Exception:
-            logging.warn("Removing service didn't succeed!")
+        except Exception as e:
+            logging.warning("Removing service didn't succeed!")
+            logging.warning(e)
 
     logging.info(f"Deploy service {service_name} to provider: {provider}")
     execute(f"sls deploy --stage {service_name} -c {provider}.yml", env=env)
