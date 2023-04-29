@@ -87,9 +87,16 @@ class DynamoStorage(Storage):
         update_expr = "SET "
         schema: dict = {}
         attribute_names = {"#P": "path"}
+
         # FIXME: pass epoch counter value
         if NodeDataType.DATA in updates:
-            schema[":data"] = {"B": node.data_b64}
+            # DynamoDB expects base64-encoded data
+            # however, boto3 ALWAYS applies encoding
+            # thus, we need to decode to let boto3 do
+            # another layer of decoding
+            #
+            # https://github.com/aws/aws-cli/issues/1097
+            schema[":data"] = {"B": node.data}
             update_expr = f"{update_expr} #D = :data,"
             attribute_names["#D"] = "data"
         if NodeDataType.CREATED in updates:
