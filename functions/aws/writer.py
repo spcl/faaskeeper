@@ -21,8 +21,10 @@ mandatory_event_fields = [
     "path",
     "session_id",
     "version",
-    "sourceIP",
-    "sourcePort",
+    # FIXME: do a different verification
+    # https://docs.pydantic.dev/latest/
+    # "sourceIP",
+    # "sourcePort",
     "data",
 ]
 
@@ -152,15 +154,22 @@ def create_node(id: str, write_event: dict) -> Optional[dict]:
         # config.user_storage.write(node)
         # config.user_storage.update(parent_node, set([NodeDataType.CHILDREN]))
 
+        if "sourceIP" in write_event:
+            ip = write_event["sourceIP"]
+            port = write_event["sourcePort"]
+        else:
+            ip = None
+            port = None
+
         assert config.distributor_queue
         config.distributor_queue.push(
             write_event["timestamp"],
-            write_event["sourceIP"],
-            write_event["sourcePort"],
             counter,
             DistributorCreateNode(
                 get_object(write_event["session_id"]), node, parent_node
             ),
+            ip,
+            port,
         )
 
         return None
@@ -254,13 +263,20 @@ def set_data(id: str, write_event: dict) -> Optional[dict]:
         logging.info(f"Finished commit")
 
         begin_push = time.time()
+        if "sourceIP" in write_event:
+            ip = write_event["sourceIP"]
+            port = write_event["sourcePort"]
+        else:
+            ip = None
+            port = None
+
         assert config.distributor_queue
         config.distributor_queue.push(
             write_event["timestamp"],
-            write_event["sourceIP"],
-            write_event["sourcePort"],
             counter,
             DistributorSetData(get_object(write_event["session_id"]), system_node),
+            ip,
+            port,
         )
         end_push = time.time()
         logging.info(f"Finished pushing update")
@@ -354,15 +370,22 @@ def delete_node(id: str, write_event: dict) -> Optional[dict]:
         )
         config.system_storage.delete_node(node, timestamp)
 
+        if "sourceIP" in write_event:
+            ip = write_event["sourceIP"]
+            port = write_event["sourcePort"]
+        else:
+            ip = None
+            port = None
+
         assert config.distributor_queue
         config.distributor_queue.push(
             write_event["timestamp"],
-            write_event["sourceIP"],
-            write_event["sourcePort"],
             counter,
             DistributorDeleteNode(
                 get_object(write_event["session_id"]), node, parent_node
             ),
+            ip,
+            port,
         )
         return None
     except Exception:
@@ -386,26 +409,6 @@ ops: Dict[str, Callable[[str, dict], Optional[dict]]] = {
 #    return next(iter(obj.values()))
 def get_object(obj: dict):
     return next(iter(obj.values()))
-
-
-# def notify(write_event: dict, ret: dict):
-#
-#    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-#        try:
-#            s.settimeout(2)
-#            source_ip = get_object(write_event["sourceIP"])
-#            source_port = int(get_object(write_event["sourcePort"]))
-#            # print(source_ip, source_port)
-#            s.connect((source_ip, source_port))
-#            print(f"Connected to {source_ip}:{source_port}")
-#            s.sendall(
-#                json.dumps(
-#                    {**ret, "event": get_object(write_event["timestamp"])}
-#                ).encode()
-#            )
-#        except socket.timeout:
-#            print(f"Notification of client {source_ip}:{source_port} failed!")
-
 
 def handler(event: dict, context):
 

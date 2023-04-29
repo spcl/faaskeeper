@@ -3,6 +3,7 @@ import logging
 import os
 import socket
 from abc import ABC, abstractmethod
+from typing import Optional
 
 import boto3
 from botocore.exceptions import ClientError
@@ -13,11 +14,10 @@ class ClientChannel(ABC):
     def notify(self, session_id: str, event: str, write_event: dict, ret: dict):
         pass
 
-
-# FIXME: replace with proper deserialization
-def get_object(obj: dict):
-    return next(iter(obj.values()))
-
+class ClientConfig:
+    session_id: str
+    ip: Optional[str] = None
+    port: Optional[str] = None
 
 class ClientChannelTCP(ClientChannel):
     def __init__(self):
@@ -57,7 +57,6 @@ class ClientChannelTCP(ClientChannel):
             sock.sendall(
                 json.dumps(
                     {**ret, "event": event}
-                    # get_object(write_event["timestamp"])}
                 ).encode()
             )
         except socket.timeout:

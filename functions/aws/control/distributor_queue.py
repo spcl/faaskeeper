@@ -1,6 +1,6 @@
 import json
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Dict, Optional
 
 import boto3
 from boto3.dynamodb.types import TypeSerializer
@@ -16,10 +16,10 @@ class DistributorQueue(ABC):
     def push(
         self,
         user_timestamp: str,
-        ip: str,
-        port: str,
         counter: SystemCounter,
         event: DistributorEvent,
+        ip: Optional[str] = None,
+        port: Optional[str] = None,
     ):
         pass
 
@@ -29,18 +29,24 @@ class DistributorQueueDynamo(DistributorQueue):
         self._queue = DynamoDriver(f"{deployment_name}-distribute-queue", "key")
         self._type_serializer = TypeSerializer()
 
+    # FIXME: remove from here ip, port
     def push(
         self,
         user_timestamp: str,
-        ip: str,
-        port: str,
         counter: SystemCounter,
         event: DistributorEvent,
+        ip: Optional[str] = None,
+        port: Optional[str] = None,
     ):
         """
             We must use a single shard - everything is serialized.
         """
         counter_val = counter.sum
+
+        if ip is not None:
+            addr = {"sourceIP": ip, "sourcePort": port}
+        else:
+            addr = {}
 
         # when launching from a Dynamo trigger, the binary value
         # is not automatically base64 decoded
@@ -57,9 +63,8 @@ class DistributorQueueDynamo(DistributorQueue):
             {
                 "key": self._type_serializer.serialize("faaskeeper"),
                 "timestamp": self._type_serializer.serialize(counter_val),
-                "sourceIP": ip,
-                "sourcePort": port,
                 "user_timestamp": user_timestamp,
+                **addr,
                 **event.serialize(self._type_serializer, base64_encoded=False),
             },
         )
@@ -79,17 +84,15 @@ class DistributorQueueSQS(DistributorQueue):
     def push(
         self,
         user_timestamp: str,
-        ip: str,
-        port: str,
         counter: SystemCounter,
         event: DistributorEvent,
+        ip: Optional[str] = None,
+        port: Optional[str] = None,
     ):
         """We must use a single shard - everything is serialized.
         """
         # FIXME: is it safe here to serialize the types?
         payload: Dict[str, str] = {
-            "sourceIP": ip,
-            "sourcePort": port,
             "user_timestamp": user_timestamp,
             **event.serialize(self._type_serializer),
         }
