@@ -48,9 +48,8 @@ class Config:
         }.get(environ["USER_STORAGE"])
         self._user_storage: model.UserStorage
         if self._user_storage_type == Storage.PERSISTENT:
-            self._user_storage = model.UserS3Storage(
-                bucket_name=f"{self._deployment_name}-data"
-            )
+            s3_data_bucket = environ["S3_DATA_BUCKET"]
+            self._user_storage = model.UserS3Storage(bucket_name=s3_data_bucket)
         else:
             self._user_storage = model.UserDynamoStorage(
                 table_name=f"{self._deployment_name}-data"

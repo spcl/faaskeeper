@@ -8,7 +8,7 @@ import subprocess
 
 import click
 
-from functions.aws.init import init as aws_init
+from functions.aws.init import init as aws_init, clean as aws_clean, config as aws_config
 
 
 # Executing with shell provides options such as wildcard expansion
@@ -53,11 +53,42 @@ def deploy(ctx):
     if ctx.invoked_subcommand is None:
         service.main()
 
+@cli.group(invoke_without_command=True)
+@click.pass_context
+@common_params
+def export(ctx, provider: str, config):
+
+    config_json = json.load(config)
+    env = {
+        **os.environ,
+        "FK_VERBOSE": str(config_json["verbose"]),
+        "FK_DEPLOYMENT_NAME": str(config_json["deployment-name"]),
+        "FK_DEPLOYMENT_REGION": str(config_json["deployment-region"]),
+        "FK_USER_STORAGE": str(config_json["user-storage"]),
+        "FK_SYSTEM_STORAGE": str(config_json["system-storage"]),
+        "FK_HEARTBEAT_FREQUENCY": str(config_json["heartbeat-frequency"]),
+        "FK_WORKER_QUEUE": str(config_json["worker-queue"]),
+        "FK_DISTRIBUTOR_QUEUE": str(config_json["distributor-queue"]),
+        "FK_CLIENT_CHANNEL": str(config_json["client-channel"]),
+        "SLS_DEBUG": "*",
+    }
+    service_name = config_json["deployment-name"]
+    try:
+        logging.info(
+            f"Exporting env variables for service {service_name} at provider: {provider}"
+        )
+        execute(
+            f"sls export-env --stage {service_name} -c {provider}.yml", env=env
+        )
+    except Exception as e:
+        logging.error("Export env didn't succeed!")
+        logging.error(e)
 
 @deploy.command()
+@click.argument("output_config")
 @common_params
 @click.option("--clean/--no-clean", default=False)
-def service(provider: str, config, clean: bool):
+def service(output_config: str, provider: str, config, clean: bool):
 
     config_json = json.load(config)
     env = {
@@ -79,6 +110,9 @@ def service(provider: str, config, clean: bool):
             logging.info(
                 f"Remove existing service {service_name} at provider: {provider}"
             )
+            if provider == "aws":
+                execute(f"sls export-env --stage {service_name} -c {provider}.yml", env=env)
+                aws_clean(f"faaskeeper-{service_name}", config_json["deployment-region"])
             execute(
                 f"sls remove --stage {service_name} -c {provider}.yml", env=env
             )
@@ -88,10 +122,13 @@ def service(provider: str, config, clean: bool):
 
     logging.info(f"Deploy service {service_name} to provider: {provider}")
     execute(f"sls deploy --stage {service_name} -c {provider}.yml", env=env)
+    execute(f"sls export-env --stage {service_name} -c {provider}.yml", env=env)
 
     if provider == "aws":
         aws_init(f"faaskeeper-{service_name}", config_json["deployment-region"])
-
+        final_config = aws_config(config_json)
+        logging.info(f"Exporting FaaSKeeper config to {output_config}!")
+        json.dump(final_config, open(output_config, 'w'), indent=2)
 
 @deploy.command()
 @common_params
@@ -151,6 +188,9 @@ def remove_service(provider: str, config):
     }
     service_name = config_json["deployment-name"]
     logging.info(f"Remove existing service {service_name} at provider: {provider}")
+    execute(f"sls export-env --stage {service_name} -c {provider}.yml", env=env)
+    if provider == "aws":
+        aws_clean(f"faaskeeper-{service_name}", config_json["deployment-region"])
     execute(f"sls remove --stage {service_name} -c {provider}.yml", env=env)
 
 

@@ -1,5 +1,6 @@
 boto3==1.11.6
 click==8.0.2
+python-dotenv
 #linting
 flake8==3.7.9
 flake8-boto3==0.3.0

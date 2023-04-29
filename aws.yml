@@ -9,7 +9,7 @@ provider:
   environment:
     SQS_QUEUE: ${self:service}-${opt:stage, self:provider.stage}
     DYNAMODB_TABLE: ${self:service}-${opt:stage, self:provider.stage}
-    S3_BUCKET:      ${self:service}-${opt:stage, self:provider.stage}
+    S3_DATA_BUCKET: ${self:resources.Resources.dataBucket.Properties.BucketName}
 
 package:
   # this is horribly broken
@@ -33,6 +33,7 @@ functions:
       DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
       CLIENT_CHANNEL: ${env:FK_CLIENT_CHANNEL}
       QUEUE_PREFIX: ${self:service}-${opt:stage, self:provider.stage}
+      S3_DATA_BUCKET: ${self:resources.Resources.dataBucket.Properties.BucketName}
     iamRoleStatements:
       - Effect: Allow
         Action:
@@ -297,17 +298,29 @@ resources:
     dataBucket:
       Type: AWS::S3::Bucket
       Properties:
-        BucketName: ${self:provider.environment.S3_BUCKET}-data
+        BucketName: !Join
+          - '-'
+          - - ${self:service}
+            - ${opt:stage, self:provider.stage}
+            - 'data'
+            - !Select
+              - 0
+              - !Split
+                - '-'
+                - !Select
+                  - 2
+                  - !Split
+                    - /
+                    - !Ref AWS::StackId
+
 
 plugins:
-  - serverless-s3-cleaner
+  - serverless-export-env
   - serverless-python-requirements
   - serverless-iam-roles-per-function
-
 custom:
-  serverless-s3-cleaner:
-    buckets:
-      - ${self:provider.environment.S3_BUCKET}-data
+  export-env:
+    overwrite: true
   pythonRequirements:
     pythonBin: python3
     pipCmdExtraArgs:
