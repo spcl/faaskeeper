@@ -41,7 +41,6 @@ functions:
           - dynamodb:PutItem
           - dynamodb:UpdateItem
           - dynamodb:DeleteItem
-          - sqs:*
         Resource:
           - Fn::GetAtt:
               - dataTable
@@ -55,8 +54,15 @@ functions:
           - Fn::GetAtt:
               - distributeTable
               - Arn
+      - Effect: Allow
+        Action:
+          - sqs:*
+        Resource:
           - Fn::GetAtt:
               - distributorQueue
+              - Arn
+          - Fn::GetAtt:
+              - clientQueue
               - Arn
     events:
       - stream:
@@ -128,6 +134,13 @@ functions:
                   - dataBucket
                   - Arn
               - "/*"
+      - Effect: Allow
+        Action:
+          - sqs:*
+        Resource:
+          - Fn::GetAtt:
+              - clientQueue
+              - Arn
     events:
       - stream:
           type: dynamodb
