@@ -74,7 +74,7 @@ class ClientChannelSQS(ClientChannel):
                 "QueueUrl"
             ]
         except ClientError as error:
-            logging.exception(f"Couldn't get queue named {self.queue_name}")
+            logging.exception(f"Couldn't get queue named {self._queue_name}")
             raise error
 
     def notify(self, user: str, event: str, write_event: dict, ret: dict):
