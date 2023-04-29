@@ -85,24 +85,6 @@ def launch_watcher(region: str, json_in: dict):
 #    return region_watches[region].get_watch_counters(node_path)
 
 
-# def notify(write_event: dict, ret: dict):
-#
-#    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-#        try:
-#            s.settimeout(2)
-#            logging.info("Notification", write_event)
-#            source_ip = get_object(write_event["sourceIP"])
-#            source_port = int(get_object(write_event["sourcePort"]))
-#            s.connect((source_ip, source_port))
-#            s.sendall(
-#                json.dumps(
-#                    {**ret, "event": get_object(write_event["user_timestamp"])}
-#                ).encode()
-#            )
-#        except socket.timeout:
-#            print(f"Notification of client {source_ip}:{source_port} failed!")
-
-
 def handler(event: dict, context):
 
     events = event["Records"]
