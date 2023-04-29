@@ -13,6 +13,7 @@ jobs:
       matrix:
          python-version: [3.7]
          user-storage: [key-value, persistent]
+         queue: [dynamodb, sqs]
          cloud-provider: [aws]
          #python-version: [3.6, 3.7, 3.8, 3.9]
 
@@ -34,7 +35,7 @@ jobs:
           source python-venv/bin/activate && tools/linting.py tests
       - name: Deploy service
         run: |
-          source python-venv/bin/activate && ./fk.py deploy service tests/${{matrix.cloud-provider}}_$(echo ${{matrix.user-storage}} | tr '-' '_')_final.json --provider ${{matrix.cloud-provider}} --clean --config tests/${{matrix.cloud-provider}}_$(echo ${{matrix.user-storage}} | tr '-' '_').json
+          source python-venv/bin/activate && TEST_CASE="${{matrix.cloud-provider}}_${{matrix.user-storage}}_${{matrix.queue}}" ./fk.py deploy service tests/${TEST_CASE}_final.json --provider ${{matrix.cloud-provider}} --clean --config tests/${TEST_CASE}.json
         env:
           AWS_ACCESS_KEY_ID: ${{secrets.AWS_ACCESS_KEY_ID}}
           AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY}}
@@ -43,7 +44,7 @@ jobs:
         run: |
           echo 'TEST_USER_STORAGE='${{ matrix.user-storage }} >> $GITHUB_ENV
           echo 'TEST_CLOUD_PROVIDER='${{ matrix.cloud-provider }} >> $GITHUB_ENV
-          echo 'TEST_CONFIGURATION_JSON=tests/'${{matrix.cloud-provider}}_$(echo ${{matrix.user-storage}} | tr '-' '_')_final.json >> $GITHUB_ENV
+          echo 'TEST_CONFIGURATION_JSON=tests/'${{matrix.cloud-provider}}_${{matrix.user-storage}}_${{matrix.queue}}_final.json >> $GITHUB_ENV
       - name: Test with pytest
         run: |
           source python-venv/bin/activate && sleep 60 && pytest tests/*.py

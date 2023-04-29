@@ -46,7 +46,7 @@ def test_set_data(client, request):
     # should succeed with no errors
     # verify that
     try:
-        path = "/test_set_data"
+        path = "/test_set_data3"
         node = client.create(path, b"10")
         assert node
         assert node.path == path
@@ -89,7 +89,7 @@ def test_set_data_async(client, request):
     # should succeed with no errors
     # verify that
     try:
-        path = "/test_set_data2"
+        path = "/test_set_data4"
         node = client.create(path, b"10")
         assert node
         assert node.path == path
