@@ -89,6 +89,8 @@ class Config:
             "tcp": ChannelType.TCP,
             "sqs": ChannelType.SQS,
         }.get(environ["CLIENT_CHANNEL"])
+
+        self._client_channel: control.ClientChannel
         if self._client_channel_type == ChannelType.TCP:
             self._client_channel = control.ClientChannelTCP()
         elif self._client_channel_type == ChannelType.SQS:
