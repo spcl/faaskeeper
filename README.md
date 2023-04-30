@@ -152,3 +152,4 @@ The linting helper `tools/linting.py` includes a call to `mypy` to check for sta
 ## Authors
 
 * [Marcin Copik (ETH Zurich)](https://github.com/mcopik/) - main author.
+* [Ziad Hany](https://github.com/ziadhany) - SQS client channel.
