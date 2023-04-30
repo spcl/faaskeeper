@@ -1,11 +1,36 @@
 import boto3
+from dotenv import dotenv_values
 
 import functions.aws.model as model
 from faaskeeper.node import Node
 from faaskeeper.version import EpochCounter, SystemCounter, Version
 
 
+def clean(service_name: str, region: str):
+
+    envs = dotenv_values()
+    s3_data_bucket = envs["S3_DATA_BUCKET"]
+    s3_bucket = boto3.resource("s3").Bucket(s3_data_bucket)
+    try:
+        s3_bucket.objects.all().delete()
+    except Exception:
+        pass
+
+
+def config(config_json: dict):
+
+    envs = dotenv_values()
+    s3_data_bucket = envs["S3_DATA_BUCKET"]
+    config_json["aws"] = {"data-bucket": s3_data_bucket}
+
+    return config_json
+
+
 def init(service_name: str, region: str):
+
+    envs = dotenv_values()
+    s3_data_bucket = envs["S3_DATA_BUCKET"]
+    assert s3_data_bucket is not None
 
     dynamodb = boto3.client("dynamodb", region_name=region)
     # clean state table
@@ -40,7 +65,7 @@ def init(service_name: str, region: str):
     )
 
     # Initialize root node for S3
-    s3 = model.UserS3Storage(bucket_name=f"{service_name}-data")
+    s3 = model.UserS3Storage(bucket_name=s3_data_bucket)
     node = Node("/")
     node.created = Version(SystemCounter.from_raw_data([0]), None)
     node.modified = Version(

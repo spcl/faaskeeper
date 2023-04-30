@@ -9,5 +9,5 @@
   "heartbeat-frequency": 12,
   "worker-queue": "dynamodb",
   "distributor-queue": "dynamodb",
-  "client-channel": "sqs"
+  "client-channel": "tcp"
 }

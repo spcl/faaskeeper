@@ -38,7 +38,7 @@ class Config:
             format=logging_format,
             datefmt=logging_date_format,
             level=logging.INFO if self._verbose else logging.WARNING,
-            force=True,
+            # force=True,
         )
 
         # configure user storage handle
@@ -48,9 +48,8 @@ class Config:
         }.get(environ["USER_STORAGE"])
         self._user_storage: model.UserStorage
         if self._user_storage_type == Storage.PERSISTENT:
-            self._user_storage = model.UserS3Storage(
-                bucket_name=f"{self._deployment_name}-data"
-            )
+            s3_data_bucket = environ["S3_DATA_BUCKET"]
+            self._user_storage = model.UserS3Storage(bucket_name=s3_data_bucket)
         else:
             self._user_storage = model.UserDynamoStorage(
                 table_name=f"{self._deployment_name}-data"
@@ -90,8 +89,12 @@ class Config:
             "tcp": ChannelType.TCP,
             "sqs": ChannelType.SQS,
         }.get(environ["CLIENT_CHANNEL"])
+
+        self._client_channel: control.ClientChannel
         if self._client_channel_type == ChannelType.TCP:
             self._client_channel = control.ClientChannelTCP()
+        elif self._client_channel_type == ChannelType.SQS:
+            self._client_channel = control.ClientChannelSQS()
         else:
             raise RuntimeError("Not implemented!")
 

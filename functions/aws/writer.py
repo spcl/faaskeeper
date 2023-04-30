@@ -10,6 +10,7 @@ from faaskeeper.node import Node, NodeDataType
 from faaskeeper.stats import StorageStatistics
 from faaskeeper.version import Version
 from functions.aws.config import Config
+from functions.aws.control.channel import Client
 from functions.aws.control.distributor_events import (
     DistributorCreateNode,
     DistributorDeleteNode,
@@ -21,8 +22,6 @@ mandatory_event_fields = [
     "path",
     "session_id",
     "version",
-    "sourceIP",
-    "sourcePort",
     "data",
 ]
 
@@ -71,7 +70,7 @@ WRITER_ID = 0
 """
 
 
-def create_node(id: str, write_event: dict) -> Optional[dict]:
+def create_node(client: Client, id: str, write_event: dict) -> Optional[dict]:
 
     if not verify_event(id, write_event, ["flags"]):
         return {"status": "failure", "reason": "incorrect_request"}
@@ -154,13 +153,9 @@ def create_node(id: str, write_event: dict) -> Optional[dict]:
 
         assert config.distributor_queue
         config.distributor_queue.push(
-            write_event["timestamp"],
-            write_event["sourceIP"],
-            write_event["sourcePort"],
             counter,
-            DistributorCreateNode(
-                get_object(write_event["session_id"]), node, parent_node
-            ),
+            DistributorCreateNode(client.session_id, node, parent_node),
+            client,
         )
 
         return None
@@ -179,9 +174,9 @@ def create_node(id: str, write_event: dict) -> Optional[dict]:
         return {"status": "failure", "reason": "unknown"}
 
 
-def deregister_session(id: str, write_event: dict) -> Optional[dict]:
+def deregister_session(client: Client, id: str, write_event: dict) -> Optional[dict]:
 
-    session_id = get_object(write_event["session_id"])
+    session_id = client.session_id
     try:
         # TODO: remove ephemeral nodes
         # FIXME: check return value
@@ -201,7 +196,7 @@ def deregister_session(id: str, write_event: dict) -> Optional[dict]:
         return {"status": "failure", "reason": "unknown"}
 
 
-def set_data(id: str, write_event: dict) -> Optional[dict]:
+def set_data(client: Client, id: str, write_event: dict) -> Optional[dict]:
 
     begin = time.time()
     # FIXME: version
@@ -254,13 +249,10 @@ def set_data(id: str, write_event: dict) -> Optional[dict]:
         logging.info(f"Finished commit")
 
         begin_push = time.time()
+
         assert config.distributor_queue
         config.distributor_queue.push(
-            write_event["timestamp"],
-            write_event["sourceIP"],
-            write_event["sourcePort"],
-            counter,
-            DistributorSetData(get_object(write_event["session_id"]), system_node),
+            counter, DistributorSetData(client.session_id, system_node), client
         )
         end_push = time.time()
         logging.info(f"Finished pushing update")
@@ -297,7 +289,7 @@ def set_data(id: str, write_event: dict) -> Optional[dict]:
         return {"status": "failure", "reason": "unknown"}
 
 
-def delete_node(id: str, write_event: dict) -> Optional[dict]:
+def delete_node(client: Client, id: str, write_event: dict) -> Optional[dict]:
 
     # if not verify_event(id, write_event, verbose_output, ["flags"]):
     #    return None
@@ -356,13 +348,7 @@ def delete_node(id: str, write_event: dict) -> Optional[dict]:
 
         assert config.distributor_queue
         config.distributor_queue.push(
-            write_event["timestamp"],
-            write_event["sourceIP"],
-            write_event["sourcePort"],
-            counter,
-            DistributorDeleteNode(
-                get_object(write_event["sesion_id"]), node, parent_node
-            ),
+            counter, DistributorDeleteNode(client.session_id, node, parent_node), client
         )
         return None
     except Exception:
@@ -374,7 +360,7 @@ def delete_node(id: str, write_event: dict) -> Optional[dict]:
         return {"status": "failure", "reason": "unknown"}
 
 
-ops: Dict[str, Callable[[str, dict], Optional[dict]]] = {
+ops: Dict[str, Callable[[Client, str, dict], Optional[dict]]] = {
     "create_node": create_node,
     "set_data": set_data,
     "delete_node": delete_node,
@@ -388,25 +374,6 @@ def get_object(obj: dict):
     return next(iter(obj.values()))
 
 
-# def notify(write_event: dict, ret: dict):
-#
-#    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-#        try:
-#            s.settimeout(2)
-#            source_ip = get_object(write_event["sourceIP"])
-#            source_port = int(get_object(write_event["sourcePort"]))
-#            # print(source_ip, source_port)
-#            s.connect((source_ip, source_port))
-#            print(f"Connected to {source_ip}:{source_port}")
-#            s.sendall(
-#                json.dumps(
-#                    {**ret, "event": get_object(write_event["timestamp"])}
-#                ).encode()
-#            )
-#        except socket.timeout:
-#            print(f"Notification of client {source_ip}:{source_port} failed!")
-
-
 def handler(event: dict, context):
 
     events = event["Records"]
@@ -414,9 +381,11 @@ def handler(event: dict, context):
     processed_events = 0
     StorageStatistics.instance().reset()
     for record in events:
+
         if "dynamodb" in record and record["eventName"] == "INSERT":
             write_event = record["dynamodb"]["NewImage"]
             event_id = record["eventID"]
+
         elif "body" in record:
             write_event = json.loads(record["body"])
             if "data" in record["messageAttributes"]:
@@ -427,6 +396,8 @@ def handler(event: dict, context):
             write_event["timestamp"] = {"S": event_id}
         else:
             raise NotImplementedError()
+
+        client = Client.deserialize(write_event)
 
         op = get_object(write_event["op"])
         if op not in ops:
@@ -440,18 +411,12 @@ def handler(event: dict, context):
             )
             continue
 
-        ret = ops[op](event_id, write_event)
+        ret = ops[op](client, event_id, write_event)
         if ret:
             if ret["status"] == "failure":
                 logging.error(f"Failed processing write event {event_id}: {ret}")
             # Failure - notify client
-            config.client_channel.notify(
-                get_object(write_event["session_id"]),
-                get_object(write_event["timestamp"]),
-                write_event,
-                ret,
-            )
-            # notify(write_event, ret)
+            config.client_channel.notify(client, ret)
             continue
         else:
             processed_events += 1

@@ -1,13 +1,14 @@
 {
   "verbose": true,
-  "cloud-provider": "aws",
   "port": 5000,
-  "deployment-name": "dev",
+  "deployment-name": "testing-persistent",
   "deployment-region": "us-east-1",
+  "cloud-provider": "aws",
+  "client-port": 5000,
   "user-storage": "persistent",
   "system-storage": "key-value",
   "heartbeat-frequency": 12,
-  "worker-queue": "dynamodb",
-  "distributor-queue": "dynamodb",
+  "worker-queue": "sqs",
+  "distributor-queue": "sqs",
   "client-channel": "sqs"
 }

@@ -65,7 +65,7 @@ class Watches:
                         (
                             c,
                             self._type_deserializer.deserialize(
-                                ret["Attributes"][self._counters.get(c)]
+                                ret["Attributes"][self._counters.get(c)]  # type: ignore
                             ),
                         )
                     )

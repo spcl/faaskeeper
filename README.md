@@ -26,6 +26,14 @@ e.g., [instructions for AWS](https://www.serverless.com/framework/docs/providers
 Currently, serverless has a bug causing it to generate empty deployment packages ([bug 1](https://github.com/serverless-heaven/serverless-webpack/issues/682), [bug 2](https://github.com/serverless/serverless/issues/8794)),
 and the `node 15.4.0` is confirmed to work - any newer version is NOT guaranteed to work.
 
+## Configuration.
+
+The FaaSKeeper architecture can be customized with the following settings:
+* **User storage** - the permitted values are *key-value* (DynamoDB on AWS), and *persistent* (S3 on AWS).
+* **Worker queue** - there are two types of *writer* and *distributor* queues - *dynamodb* using DynamoDB streams, and *sqs* using the SQS queue.
+* **Client channel** - functions deliver the client notification with a *tcp* and *sqs* channel. The former requires the client to accept incoming TCP connections, i.e., it needs to have public IP.
+See the JSON config example in `config/user_config.json` for details.
+
 ## Installation & Deployment
 
 To install the local development environment with all necessary packages, please use the `install.py`
@@ -37,9 +45,12 @@ Use the JSON config example in `config/user_config.json` to change the deploymen
 Use this to deploy the service with all functions, storage, and queue services:
 
 ```
-./fk.py deploy service --provider aws --config config/user_config.json
+./fk.py deploy service config/user_config_final.json --provider aws --config config/user_config.json
 ```
 
+The script will generate a new version of the config in `config/user_config_final.json`, which includes
+data needed for clients, such as the location of S3 data bucket - its name is partially randomized to
+generate unique S3 bucket names.
 To update functions, they can be redeployed separately:
 
 ```
@@ -60,7 +71,7 @@ A CLI for FaaSKeeper is available in `bin/fkCli.py`. It allows to run interactiv
 and it includes history and command suggestions.
 
 ```console
-bin/fkCli.py aws faaskeeper-dev
+bin/fkCli.py <config-file>
 [fk: aws:faaskeeper-dev(CONNECTED) session:f3c1ba70 0] create /root/test1 "test_data" false false
 ```
 

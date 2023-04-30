@@ -22,7 +22,7 @@ class DynamoStorage(Storage):
         # Completely replace the existing data
         ret = self._dynamodb.put_item(
             TableName=self.storage_name,
-            Item=data,
+            Item=data,  # type: ignore
             # ExpressionAttributeNames={"#P": self._key_name},
             # ConditionExpression="attribute_not_exists(#P)",
             ReturnConsumedCapacity="TOTAL",
@@ -87,9 +87,16 @@ class DynamoStorage(Storage):
         update_expr = "SET "
         schema: dict = {}
         attribute_names = {"#P": "path"}
+
         # FIXME: pass epoch counter value
         if NodeDataType.DATA in updates:
-            schema[":data"] = {"B": node.data_b64}
+            # DynamoDB expects base64-encoded data
+            # however, boto3 ALWAYS applies encoding
+            # thus, we need to decode to let boto3 do
+            # another layer of decoding
+            #
+            # https://github.com/aws/aws-cli/issues/1097
+            schema[":data"] = {"B": node.data}
             update_expr = f"{update_expr} #D = :data,"
             attribute_names["#D"] = "data"
         if NodeDataType.CREATED in updates:
@@ -142,7 +149,7 @@ class DynamoStorage(Storage):
             TableName=self.storage_name,
             Key={self._key_name: {"S": key}},
             ReturnConsumedCapacity="TOTAL",
-            ConsistentRead=True
+            ConsistentRead=True,
         )
         StorageStatistics.instance().add_read_units(
             ret["ConsumedCapacity"]["CapacityUnits"]
