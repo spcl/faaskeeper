@@ -277,12 +277,12 @@ resources:
         AttributeDefinitions:
           - AttributeName: key
             AttributeType: S
-          - AttributeName: timestamp
+          - AttributeName: system_counter
             AttributeType: N
         KeySchema:
           - AttributeName: key
             KeyType: HASH
-          - AttributeName: timestamp
+          - AttributeName: system_counter
             KeyType: RANGE
         StreamSpecification:
           StreamViewType: NEW_IMAGE

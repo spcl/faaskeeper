@@ -10,6 +10,7 @@ from faaskeeper.node import Node, NodeDataType
 from faaskeeper.stats import StorageStatistics
 from faaskeeper.version import Version
 from functions.aws.config import Config
+from functions.aws.control.channel import Client
 from functions.aws.control.distributor_events import (
     DistributorCreateNode,
     DistributorDeleteNode,
@@ -21,10 +22,6 @@ mandatory_event_fields = [
     "path",
     "session_id",
     "version",
-    # FIXME: do a different verification
-    # https://docs.pydantic.dev/latest/
-    # "sourceIP",
-    # "sourcePort",
     "data",
 ]
 
@@ -73,7 +70,7 @@ WRITER_ID = 0
 """
 
 
-def create_node(id: str, write_event: dict) -> Optional[dict]:
+def create_node(client: Client, id: str, write_event: dict) -> Optional[dict]:
 
     if not verify_event(id, write_event, ["flags"]):
         return {"status": "failure", "reason": "incorrect_request"}
@@ -154,22 +151,11 @@ def create_node(id: str, write_event: dict) -> Optional[dict]:
         # config.user_storage.write(node)
         # config.user_storage.update(parent_node, set([NodeDataType.CHILDREN]))
 
-        if "sourceIP" in write_event:
-            ip = write_event["sourceIP"]
-            port = write_event["sourcePort"]
-        else:
-            ip = None
-            port = None
-
         assert config.distributor_queue
         config.distributor_queue.push(
-            write_event["timestamp"],
             counter,
-            DistributorCreateNode(
-                get_object(write_event["session_id"]), node, parent_node
-            ),
-            ip,
-            port,
+            DistributorCreateNode(client.session_id, node, parent_node),
+            client,
         )
 
         return None
@@ -188,9 +174,9 @@ def create_node(id: str, write_event: dict) -> Optional[dict]:
         return {"status": "failure", "reason": "unknown"}
 
 
-def deregister_session(id: str, write_event: dict) -> Optional[dict]:
+def deregister_session(client: Client, id: str, write_event: dict) -> Optional[dict]:
 
-    session_id = get_object(write_event["session_id"])
+    session_id = client.session_id
     try:
         # TODO: remove ephemeral nodes
         # FIXME: check return value
@@ -210,7 +196,7 @@ def deregister_session(id: str, write_event: dict) -> Optional[dict]:
         return {"status": "failure", "reason": "unknown"}
 
 
-def set_data(id: str, write_event: dict) -> Optional[dict]:
+def set_data(client: Client, id: str, write_event: dict) -> Optional[dict]:
 
     begin = time.time()
     # FIXME: version
@@ -263,20 +249,10 @@ def set_data(id: str, write_event: dict) -> Optional[dict]:
         logging.info(f"Finished commit")
 
         begin_push = time.time()
-        if "sourceIP" in write_event:
-            ip = write_event["sourceIP"]
-            port = write_event["sourcePort"]
-        else:
-            ip = None
-            port = None
 
         assert config.distributor_queue
         config.distributor_queue.push(
-            write_event["timestamp"],
-            counter,
-            DistributorSetData(get_object(write_event["session_id"]), system_node),
-            ip,
-            port,
+            counter, DistributorSetData(client.session_id, system_node), client
         )
         end_push = time.time()
         logging.info(f"Finished pushing update")
@@ -313,7 +289,7 @@ def set_data(id: str, write_event: dict) -> Optional[dict]:
         return {"status": "failure", "reason": "unknown"}
 
 
-def delete_node(id: str, write_event: dict) -> Optional[dict]:
+def delete_node(client: Client, id: str, write_event: dict) -> Optional[dict]:
 
     # if not verify_event(id, write_event, verbose_output, ["flags"]):
     #    return None
@@ -370,22 +346,9 @@ def delete_node(id: str, write_event: dict) -> Optional[dict]:
         )
         config.system_storage.delete_node(node, timestamp)
 
-        if "sourceIP" in write_event:
-            ip = write_event["sourceIP"]
-            port = write_event["sourcePort"]
-        else:
-            ip = None
-            port = None
-
         assert config.distributor_queue
         config.distributor_queue.push(
-            write_event["timestamp"],
-            counter,
-            DistributorDeleteNode(
-                get_object(write_event["session_id"]), node, parent_node
-            ),
-            ip,
-            port,
+            counter, DistributorDeleteNode(client.session_id, node, parent_node), client
         )
         return None
     except Exception:
@@ -397,7 +360,7 @@ def delete_node(id: str, write_event: dict) -> Optional[dict]:
         return {"status": "failure", "reason": "unknown"}
 
 
-ops: Dict[str, Callable[[str, dict], Optional[dict]]] = {
+ops: Dict[str, Callable[[Client, str, dict], Optional[dict]]] = {
     "create_node": create_node,
     "set_data": set_data,
     "delete_node": delete_node,
@@ -410,6 +373,7 @@ ops: Dict[str, Callable[[str, dict], Optional[dict]]] = {
 def get_object(obj: dict):
     return next(iter(obj.values()))
 
+
 def handler(event: dict, context):
 
     events = event["Records"]
@@ -417,6 +381,7 @@ def handler(event: dict, context):
     processed_events = 0
     StorageStatistics.instance().reset()
     for record in events:
+
         if "dynamodb" in record and record["eventName"] == "INSERT":
             write_event = record["dynamodb"]["NewImage"]
             event_id = record["eventID"]
@@ -432,6 +397,8 @@ def handler(event: dict, context):
         else:
             raise NotImplementedError()
 
+        client = Client.deserialize(write_event)
+
         op = get_object(write_event["op"])
         if op not in ops:
             logging.error(
@@ -444,18 +411,12 @@ def handler(event: dict, context):
             )
             continue
 
-        ret = ops[op](event_id, write_event)
+        ret = ops[op](client, event_id, write_event)
         if ret:
             if ret["status"] == "failure":
                 logging.error(f"Failed processing write event {event_id}: {ret}")
             # Failure - notify client
-            config.client_channel.notify(
-                get_object(write_event["session_id"]),
-                get_object(write_event["timestamp"]),
-                write_event,
-                ret,
-            )
-            # notify(write_event, ret)
+            config.client_channel.notify(client, ret)
             continue
         else:
             processed_events += 1

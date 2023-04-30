@@ -1,11 +1,12 @@
 import json
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
+from typing import Dict
 
 import boto3
 from boto3.dynamodb.types import TypeSerializer
 
 from faaskeeper.version import SystemCounter
+from functions.aws.control.channel import Client
 from functions.aws.control.dynamo import DynamoStorage as DynamoDriver
 
 from .distributor_events import DistributorEvent
@@ -13,14 +14,7 @@ from .distributor_events import DistributorEvent
 
 class DistributorQueue(ABC):
     @abstractmethod
-    def push(
-        self,
-        user_timestamp: str,
-        counter: SystemCounter,
-        event: DistributorEvent,
-        ip: Optional[str] = None,
-        port: Optional[str] = None,
-    ):
+    def push(self, counter: SystemCounter, event: DistributorEvent, client: Client):
         pass
 
 
@@ -30,23 +24,11 @@ class DistributorQueueDynamo(DistributorQueue):
         self._type_serializer = TypeSerializer()
 
     # FIXME: remove from here ip, port
-    def push(
-        self,
-        user_timestamp: str,
-        counter: SystemCounter,
-        event: DistributorEvent,
-        ip: Optional[str] = None,
-        port: Optional[str] = None,
-    ):
+    def push(self, counter: SystemCounter, event: DistributorEvent, client: Client):
         """
             We must use a single shard - everything is serialized.
         """
         counter_val = counter.sum
-
-        if ip is not None:
-            addr = {"sourceIP": ip, "sourcePort": port}
-        else:
-            addr = {}
 
         # when launching from a Dynamo trigger, the binary value
         # is not automatically base64 decoded
@@ -58,13 +40,15 @@ class DistributorQueueDynamo(DistributorQueue):
         #
         # thus, we need to decode the value first
 
+        client_serialization = {
+            x: self._type_serializer.serialize(y) for x, y in client.serialize().items()
+        }
         self._queue.write(
             "",
             {
                 "key": self._type_serializer.serialize("faaskeeper"),
-                "timestamp": self._type_serializer.serialize(counter_val),
-                "user_timestamp": user_timestamp,
-                **addr,
+                "system_counter": self._type_serializer.serialize(counter_val),
+                **client_serialization,
                 **event.serialize(self._type_serializer, base64_encoded=False),
             },
         )
@@ -81,27 +65,17 @@ class DistributorQueueSQS(DistributorQueue):
 
         self._type_serializer = TypeSerializer()
 
-    def push(
-        self,
-        user_timestamp: str,
-        counter: SystemCounter,
-        event: DistributorEvent,
-        ip: Optional[str] = None,
-        port: Optional[str] = None,
-    ):
-        """We must use a single shard - everything is serialized.
-        """
+    def push(self, counter: SystemCounter, event: DistributorEvent, client: Client):
+
         # FIXME: is it safe here to serialize the types?
+        client_serialization = {
+            x: self._type_serializer.serialize(y) for x, y in client.serialize().items()
+        }
         payload: Dict[str, str] = {
-            "user_timestamp": user_timestamp,
+            **client_serialization,  # type: ignore
             **event.serialize(self._type_serializer),
         }
-        # if "data" in payload:
-        #    binary_data = payload["data"]["B"]
-        #    del payload["data"]
-        #    attributes = {"data": {"BinaryValue": binary_data, "DataType": "Binary"}}
-        # else:
-        #    attributes = {}
+
         attributes: dict = {}
         self._sqs_client.send_message(
             QueueUrl=self._sqs_queue_url,

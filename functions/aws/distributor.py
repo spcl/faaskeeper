@@ -10,6 +10,7 @@ import boto3
 from faaskeeper.stats import StorageStatistics
 from faaskeeper.watch import WatchEventType, WatchType
 from functions.aws.config import Config
+from functions.aws.control.channel import Client
 from functions.aws.control.distributor_events import (
     DistributorCreateNode,
     DistributorDeleteNode,
@@ -122,6 +123,8 @@ def handler(event: dict, context):
             else:
                 raise NotImplementedError()
 
+            client = Client.deserialize(write_event)
+
             # FIXME: hide under abstraction, boto3 deserialize
             operation: DistributorEvent
             counters = []
@@ -166,18 +169,12 @@ def handler(event: dict, context):
                 if ret:
                     # notify client about success
                     config.client_channel.notify(
-                        operation.session_id,
-                        get_object(write_event["user_timestamp"]),
-                        write_event,
-                        ret,
+                        client, ret,
                     )
                     processed_events += 1
                 else:
                     config.client_channel.notify(
-                        operation.session_id,
-                        get_object(write_event["user_timestamp"]),
-                        write_event,
-                        {"status": "failure", "reason": "distributor failured"},
+                        client, {"status": "failure", "reason": "distributor failured"},
                     )
                 end_notify = time.time()
             except Exception:
@@ -186,10 +183,7 @@ def handler(event: dict, context):
 
                 traceback.print_exc()
                 config.client_channel.notify(
-                    operation.session_id,
-                    get_object(write_event["user_timestamp"]),
-                    write_event,
-                    {"status": "failure", "reason": "distributor failured"},
+                    client, {"status": "failure", "reason": "distributor failured"},
                 )
         begin_watch_wait = time.time()
         for f in watches_submitters:
