@@ -2,7 +2,7 @@
 
 **The ZooKeeper-like serverless coordination service FaaSKeeper.**
 
-[![GH Actions](https://github.com/mcopik/faaskeeper/actions/workflows/build.yml/badge.svg)](https://github.com/mcopik/faaskeeper/actions/workflows/build.yml)
+[![GH Actions](https://github.com/spcl/faaskeeper/actions/workflows/build.yml/badge.svg)](https://github.com/spcl/faaskeeper/actions/workflows/build.yml)
 
 The main implementation of the serverless FaaSKeeper service.
 At the moment we support an AWS deployment only.
