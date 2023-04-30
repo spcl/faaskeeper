@@ -91,7 +91,7 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
         # "watch" requires conversion - API uses a callback
         # the CLI is a boolean switch if callback should be use or not
         if param.name == "watch":
-            if bool(args[idx]):
+            if args[idx].lower() == "true":
                 converted_arguments.append(watch_callback)
             else:
                 converted_arguments.append(None)
