@@ -127,6 +127,7 @@ def handler(event: dict, context):
 
             # FIXME: hide under abstraction, boto3 deserialize
             operation: DistributorEvent
+
             counters = []
             if event_type == DistributorEventType.CREATE_NODE:
                 operation = DistributorCreateNode.deserialize(write_event)
@@ -141,11 +142,15 @@ def handler(event: dict, context):
                 operation = DistributorDeleteNode.deserialize(write_event)
             else:
                 raise NotImplementedError()
+
             try:
+
                 begin_write = time.time()
                 # write new data
                 for r in regions:
-                    ret = operation.execute(config.user_storage, epoch_counters[r])
+                    ret = operation.execute(
+                        config.system_storage, config.user_storage, epoch_counters[r]
+                    )
                 end_write = time.time()
                 begin_watch = time.time()
                 # start watch delivery
@@ -176,7 +181,7 @@ def handler(event: dict, context):
                 else:
                     config.client_channel.notify(
                         client,
-                        {"status": "failure", "reason": "distributor failured"},
+                        {"status": "failure", "reason": "distributor failure"},
                     )
                 end_notify = time.time()
             except Exception:
@@ -186,7 +191,7 @@ def handler(event: dict, context):
                 traceback.print_exc()
                 config.client_channel.notify(
                     client,
-                    {"status": "failure", "reason": "distributor failured"},
+                    {"status": "failure", "reason": "distributor failure"},
                 )
         begin_watch_wait = time.time()
         for f in watches_submitters:
@@ -194,24 +199,25 @@ def handler(event: dict, context):
         end_watch_wait = time.time()
         end = time.time()
 
-        global repetitions
-        global sum_total
-        global sum_notify
-        global sum_write
-        global sum_watch
-        global sum_watch_wait
-        repetitions += 1
-        sum_total += end - begin
-        sum_notify += end_notify - begin_notify
-        sum_write += end_write - begin_write
-        sum_watch += end_watch - begin_watch
-        sum_watch_wait += end_watch_wait - begin_watch_wait
-        if repetitions % 100 == 0:
-            print("RESULT_TOTAL", sum_total)
-            print("RESULT_NOTIFY", sum_notify)
-            print("RESULT_WRITE", sum_write)
-            print("RESULT_WATCH_WAIT", sum_watch)
-            print("RESULT_WATCH_WAIT", sum_watch_wait)
+        # FIXME: proper timing
+        # global repetitions
+        # global sum_total
+        # global sum_notify
+        # global sum_write
+        # global sum_watch
+        # global sum_watch_wait
+        # repetitions += 1
+        # sum_total += end - begin
+        # sum_notify += end_notify - begin_notify
+        # sum_write += end_write - begin_write
+        # sum_watch += end_watch - begin_watch
+        # sum_watch_wait += end_watch_wait - begin_watch_wait
+        # if repetitions % 100 == 0:
+        #    print("RESULT_TOTAL", sum_total)
+        #    print("RESULT_NOTIFY", sum_notify)
+        #    print("RESULT_WRITE", sum_write)
+        #    print("RESULT_WATCH_WAIT", sum_watch)
+        #    print("RESULT_WATCH_WAIT", sum_watch_wait)
 
     except Exception:
         print("Failure!")

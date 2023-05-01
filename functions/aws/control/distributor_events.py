@@ -7,8 +7,9 @@ from boto3.dynamodb.types import TypeDeserializer
 
 from faaskeeper.node import Node, NodeDataType
 from faaskeeper.version import EpochCounter, SystemCounter, Version
-
-from ..model.user_storage import Storage as UserStorage
+from functions.aws.model import SystemStorage
+from functions.aws.model.system_storage import Node as SystemNode
+from functions.aws.model.user_storage import Storage as UserStorage
 
 
 class DistributorEventType(IntEnum):
@@ -18,12 +19,17 @@ class DistributorEventType(IntEnum):
 
 
 class DistributorEvent(ABC):
-    def __init__(self, session_id: str):
+    def __init__(self, event_id: str, session_id: str):
         self._session_id = session_id
+        self._event_id = event_id
 
     @property
     def session_id(self) -> str:
         return self._session_id
+
+    @property
+    def event_id(self) -> str:
+        return self._event_id
 
     @abstractmethod
     def serialize(self, serializer, base64_encoded=True) -> dict:
@@ -46,7 +52,10 @@ class DistributorEvent(ABC):
 
     @abstractmethod
     def execute(
-        self, user_storage: UserStorage, epoch_counters: Set[str]
+        self,
+        system_storage: SystemStorage,
+        user_storage: UserStorage,
+        epoch_counters: Set[str],
     ) -> Optional[dict]:
         pass
 
@@ -55,8 +64,8 @@ class DistributorCreateNode(DistributorEvent):
 
     _type_deserializer = TypeDeserializer()
 
-    def __init__(self, session_id: str, node: Node, parent_node: Node):
-        super().__init__(session_id)
+    def __init__(self, event_id: str, session_id: str, node: Node, parent_node: Node):
+        super().__init__(event_id, session_id)
         self._node = node
         self._parent_node = parent_node
 
@@ -70,8 +79,8 @@ class DistributorCreateNode(DistributorEvent):
         data = {
             "type": serializer.serialize(self.type.value),
             "session_id": serializer.serialize(self.session_id),
+            "event_id": serializer.serialize(self.event_id),
             "path": serializer.serialize(self.node.path),
-            "counter": self.node.created.system.version,
             "parent_path": serializer.serialize(self.parent.path),
             "parent_children": serializer.serialize(self.parent.children),
         }
@@ -88,9 +97,9 @@ class DistributorCreateNode(DistributorEvent):
 
         deserializer = DistributorCreateNode._type_deserializer
         node = Node(deserializer.deserialize(event_data["path"]))
-        counter = SystemCounter.from_provider_schema(event_data["counter"])
-        node.created = Version(counter, None)
-        node.modified = Version(counter, None)
+        # counter = SystemCounter.from_provider_schema(event_data["counter"])
+        # node.created = Version(counter, None)
+        # node.modified = Version(counter, None)
         node.children = []
         # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
         # node.data = base64.b64decode(event_data["data"]["B"])
@@ -100,12 +109,31 @@ class DistributorCreateNode(DistributorEvent):
         parent_node.children = deserializer.deserialize(event_data["parent_children"])
 
         session_id = deserializer.deserialize(event_data["session_id"])
+        event_id = deserializer.deserialize(event_data["event_id"])
 
-        return DistributorCreateNode(session_id, node, parent_node)
+        return DistributorCreateNode(event_id, session_id, node, parent_node)
 
     def execute(
-        self, user_storage: UserStorage, epoch_counters: Set[str]
+        self,
+        system_storage: SystemStorage,
+        user_storage: UserStorage,
+        epoch_counters: Set[str],
     ) -> Optional[dict]:
+
+        system_node = system_storage.read_node(self.node)
+
+        if system_node.Status == SystemNode.Status.NOT_EXISTS:
+            return {
+                "status": "failure",
+                "path": self.node.path,
+                "reason": f"node {self.node.path} does not exist in system storage",
+            }
+
+        if system_node.Status == SystemNode.Status.LOCKED:
+            raise NotImplementedError()
+
+        # FIXME: check the list of pending updates
+
         # FIXME: Update
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.write(self.node)
@@ -135,8 +163,8 @@ class DistributorSetData(DistributorEvent):
 
     _type_deserializer = TypeDeserializer()
 
-    def __init__(self, session_id: str, node: Node):
-        super().__init__(session_id)
+    def __init__(self, event_id: str, session_id: str, node: Node):
+        super().__init__(event_id, session_id)
         self._node = node
 
     def serialize(self, serializer, base64_encoded=True) -> dict:
@@ -146,6 +174,7 @@ class DistributorSetData(DistributorEvent):
         data = {
             "type": serializer.serialize(self.type.value),
             "session_id": serializer.serialize(self.session_id),
+            "event_id": serializer.serialize(self.event_id),
             "path": serializer.serialize(self.node.path),
             "counter": self.node.modified.system.version,
         }
@@ -169,19 +198,36 @@ class DistributorSetData(DistributorEvent):
         node.data_b64 = event_data["data"]["B"]
 
         session_id = deserializer.deserialize(event_data["session_id"])
+        event_id = deserializer.deserialize(event_data["event_id"])
 
-        return DistributorSetData(session_id, node)
+        return DistributorSetData(event_id, session_id, node)
 
     def execute(
-        self, user_storage: UserStorage, epoch_counters: Set[str]
+        self,
+        system_storage: SystemStorage,
+        user_storage: UserStorage,
+        epoch_counters: Set[str],
     ) -> Optional[dict]:
-        # FIXME: update
+
+        system_node = system_storage.read_node(self.node)
+
+        if system_node.Status == SystemNode.Status.NOT_EXISTS:
+            return {
+                "status": "failure",
+                "path": self.node.path,
+                "reason": f"node {self.node.path} does not exist in system storage",
+            }
+
+        if system_node.Status == SystemNode.Status.LOCKED:
+            raise NotImplementedError()
+
         """
         On DynamoDB we skip updating the created version as it doesn't change.
         On S3, we need to write this every single time.
         """
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.node, set([NodeDataType.MODIFIED, NodeDataType.DATA]))
+
         return {
             "status": "success",
             "path": self.node.path,
@@ -201,8 +247,8 @@ class DistributorDeleteNode(DistributorEvent):
 
     _type_deserializer = TypeDeserializer()
 
-    def __init__(self, session_id: str, node: Node, parent_node: Node):
-        super().__init__(session_id)
+    def __init__(self, event_id: str, session_id: str, node: Node, parent_node: Node):
+        super().__init__(event_id, session_id)
         self._node = node
         self._parent_node = parent_node
 
@@ -213,6 +259,7 @@ class DistributorDeleteNode(DistributorEvent):
         return {
             "type": serializer.serialize(self.type.value),
             "session_id": serializer.serialize(self.session_id),
+            "event_id": serializer.serialize(self.event_id),
             "path": serializer.serialize(self.node.path),
             "parent_path": serializer.serialize(self.parent.path),
             "parent_children": serializer.serialize(self.parent.children),
@@ -230,11 +277,15 @@ class DistributorDeleteNode(DistributorEvent):
         parent_node.children = deserializer.deserialize(event_data["parent_children"])
 
         session_id = deserializer.deserialize(event_data["session_id"])
+        event_id = deserializer.deserialize(event_data["event_id"])
 
-        return DistributorDeleteNode(session_id, node, parent_node)
+        return DistributorDeleteNode(event_id, session_id, node, parent_node)
 
     def execute(
-        self, user_storage: UserStorage, epoch_counters: Set[str]
+        self,
+        system_storage: SystemStorage,
+        user_storage: UserStorage,
+        epoch_counters: Set[str],
     ) -> Optional[dict]:
 
         # FIXME: update
