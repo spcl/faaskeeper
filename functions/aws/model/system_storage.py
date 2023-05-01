@@ -1,12 +1,44 @@
 from abc import ABC, abstractmethod
+from collections import namedtuple
+from enum import Enum
 from typing import Optional, Set, Tuple
 
 from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 
-from faaskeeper.node import Node, NodeDataType
+# from faaskeeper.node import Node, NodeDataType
+import faaskeeper.node
 from faaskeeper.stats import StorageStatistics
 from faaskeeper.version import SystemCounter, Version
 from functions.aws.control.dynamo import DynamoStorage as DynamoDriver
+
+
+class Node:
+    class Status(Enum):
+        EXISTS = (0,)
+        NOT_EXISTS = (1,)
+        LOCKED = 2
+
+    Lock = namedtuple("Lock", ["timestamp"])
+
+    def __init__(self, node: faaskeeper.node.Node, status: Status):
+        self._node = node
+        self._status = status
+
+    @property
+    def lock(self) -> Optional["Node.Lock"]:
+        return self._lock
+
+    @lock.setter
+    def lock(self, timestamp: str):
+        self._lock = Node.Lock(timestamp)
+
+    @property
+    def status(self) -> "Status":
+        return self._status
+
+    @property
+    def node(self) -> faaskeeper.node.Node:
+        return self._node
 
 
 class Storage(ABC):
@@ -26,7 +58,9 @@ class Storage(ABC):
         pass
 
     @abstractmethod
-    def lock_node(self, path: str, timestamp: int) -> Tuple[bool, Optional[Node]]:
+    def lock_node(
+        self, path: str, timestamp: int
+    ) -> Tuple[bool, Optional[faaskeeper.node.Node]]:
         pass
 
     @abstractmethod
@@ -34,17 +68,24 @@ class Storage(ABC):
         pass
 
     @abstractmethod
-    def delete_node(self, node: Node, timestamp: int):
+    def delete_node(self, node: faaskeeper.node.Node, timestamp: int):
         pass
 
     @abstractmethod
     def commit_node(
-        self, node: Node, timestamp: int, updates: Set[NodeDataType] = set()
+        self,
+        node: faaskeeper.node.Node,
+        timestamp: int,
+        updates: Set[faaskeeper.node.NodeDataType] = set(),
     ) -> bool:
         pass
 
     @abstractmethod
     def increase_system_counter(self, writer_id: int) -> Optional[SystemCounter]:
+        pass
+
+    @abstractmethod
+    def read_node(self, node: faaskeeper.node.Node) -> Node:
         pass
 
 
@@ -66,7 +107,9 @@ class DynamoStorage(Storage):
         except self._users_storage.errorSupplier.ConditionalCheckFailedException:
             return False
 
-    def lock_node(self, path: str, timestamp: int) -> Tuple[bool, Optional[Node]]:
+    def lock_node(
+        self, path: str, timestamp: int
+    ) -> Tuple[bool, Optional[faaskeeper.node.Node]]:
 
         # FIXME: move this to the interface of control driver
         # we set the timelock value to the timestamp
@@ -95,11 +138,11 @@ class DynamoStorage(Storage):
             )
             # store raw provider data
             data = ret["Attributes"]
-            n: Optional[Node] = None
+            n: Optional[faaskeeper.node.Node] = None
             # FIXME: merge with library code?
             # node already exists
             if "cFxidSys" in data:
-                n = Node(path)
+                n = faaskeeper.node.Node(path)
                 created = SystemCounter.from_provider_schema(
                     data["cFxidSys"]  # type: ignore
                 )
@@ -128,10 +171,13 @@ class DynamoStorage(Storage):
 
         We don't perform any additional updates - just unlock.
         """
-        return self.commit_node(Node(path), timestamp)
+        return self.commit_node(faaskeeper.node.Node(path), timestamp)
 
     def commit_node(
-        self, node: Node, timestamp: int, updates: Set[NodeDataType] = set()
+        self,
+        node: faaskeeper.node.Node,
+        timestamp: int,
+        updates: Set[faaskeeper.node.NodeDataType] = set(),
     ) -> bool:
 
         """
@@ -150,13 +196,13 @@ class DynamoStorage(Storage):
                 update_expr = f"{update_expr} SET "
             update_values = {}
 
-            if NodeDataType.CREATED in updates:
+            if faaskeeper.node.NodeDataType.CREATED in updates:
                 update_expr = f"{update_expr} cFxidSys = :createdStamp,"
                 update_values[":createdStamp"] = node.created.system.version
-            if NodeDataType.MODIFIED in updates:
+            if faaskeeper.node.NodeDataType.MODIFIED in updates:
                 update_expr = f"{update_expr} mFxidSys = :modifiedStamp,"
                 update_values[":modifiedStamp"] = node.modified.system.version
-            if NodeDataType.CHILDREN in updates:
+            if faaskeeper.node.NodeDataType.CHILDREN in updates:
                 update_expr = f"{update_expr} children = :children,"
                 update_values[":children"] = self._type_serializer.serialize(  # type: ignore
                     node.children  # type: ignore
@@ -212,7 +258,7 @@ class DynamoStorage(Storage):
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return None
 
-    def delete_node(self, node: Node, timestamp: int):
+    def delete_node(self, node: faaskeeper.node.Node, timestamp: int):
 
         ret = self._state_storage._dynamodb.delete_item(
             TableName=self._state_storage.storage_name,
@@ -228,3 +274,41 @@ class DynamoStorage(Storage):
         StorageStatistics.instance().add_write_units(
             ret["ConsumedCapacity"]["CapacityUnits"]
         )
+
+    def read_node(self, node: faaskeeper.node.Node) -> Node:
+
+        ret = self._state_storage._dynamodb.get_item(
+            TableName=self._state_storage.storage_name,
+            # path to the node
+            Key={"path": {"S": node.path}},
+            ReturnConsumedCapacity="TOTAL",
+        )
+        StorageStatistics.instance().add_read_units(
+            ret["ConsumedCapacity"]["CapacityUnits"]
+        )
+
+        if "Item" not in ret:
+            return Node(node, Node.Status.NOT_EXISTS)
+
+        data = ret["Item"]
+        # is it still locked?
+        dynamo_node: Node
+        if "timelock" in data:
+            dynamo_node = Node(node, Node.Status.LOCKED)
+            # FIXE: lock details
+        else:
+            dynamo_node = Node(node, Node.Status.EXISTS)
+
+        # FIXME: parse list updates
+        created = SystemCounter.from_provider_schema(data["cFxidSys"])  # type: ignore
+        dynamo_node.node.created = Version(
+            created,
+            None
+            # EpochCounter.from_provider_schema(data["cFxidEpoch"]),
+        )
+        modified = SystemCounter.from_provider_schema(data["mFxidSys"])  # type: ignore
+        dynamo_node.node.modified = Version(modified, None)
+        dynamo_node.node.children = self._type_deserializer.deserialize(
+            data["children"]
+        )
+        return dynamo_node
