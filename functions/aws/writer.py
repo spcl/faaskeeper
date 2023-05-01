@@ -82,7 +82,7 @@ def execute_operation(op_exec: Executor, client: Client) -> Optional[dict]:
 
         # FIXME: revrse the order here
         status, ret = op_exec.commit_and_unlock(config.system_storage)
-        if not ret:
+        if not status:
             return ret
 
         assert config.distributor_queue
@@ -93,99 +93,6 @@ def execute_operation(op_exec: Executor, client: Client) -> Optional[dict]:
     except Exception:
         # Report failure to the user
         logging.error("Failure!")
-        import traceback
-
-        traceback.print_exc()
-        return {"status": "failure", "reason": "unknown"}
-
-
-def set_data(client: Client, id: str, write_event: dict) -> Optional[dict]:
-
-    begin = time.time()
-    # FIXME: version
-    # FIXME: full conditional update
-    if not verify_event(id, write_event):
-        return None
-        return {"status": "failure", "reason": "incorrect_request"}
-    try:
-        path = get_object(write_event["path"])
-        # version = get_object(write_event["version"])
-        logging.info(f"Attempting to write data at {path}")
-
-        begin_lock = time.time()
-        # FIXME :limit number of attempts
-        while True:
-            timestamp = int(datetime.now().timestamp())
-            lock, system_node = config.system_storage.lock_node(path, timestamp)
-            if not lock:
-                sleep(2)
-            else:
-                break
-        end_lock = time.time()
-        logging.info(f"Acquired lock at {path}")
-
-        # does the node exist?
-        if system_node is None:
-            config.system_storage.unlock_node(path, timestamp)
-            return {"status": "failure", "path": path, "reason": "node_doesnt_exist"}
-
-        begin_atomic = time.time()
-        counter = config.system_storage.increase_system_counter(WRITER_ID)
-        if counter is None:
-            return {"status": "failure", "reason": "unknown"}
-        end_atomic = time.time()
-        logging.info(f"Incremented system counter")
-
-        # FIXME: distributor
-        # FIXME: epoch
-        # store only the new data and the modified version counter
-
-        data = get_object(write_event["data"])
-        system_node.modified = Version(counter, None)
-        system_node.data_b64 = data
-        logging.info(f"Finished commit preparation")
-
-        begin_commit = time.time()
-        if not config.system_storage.commit_node(system_node, timestamp):
-            return {"status": "failure", "reason": "unknown"}
-        end_commit = time.time()
-        logging.info(f"Finished commit")
-
-        begin_push = time.time()
-
-        assert config.distributor_queue
-        config.distributor_queue.push(
-            counter, DistributorSetData(client.session_id, system_node), client
-        )
-        end_push = time.time()
-        logging.info(f"Finished pushing update")
-
-        end = time.time()
-
-        global repetitions
-        global sum_total
-        global sum_lock
-        global sum_atomic
-        global sum_commit
-        global sum_push
-        repetitions += 1
-        sum_total += end - begin
-        sum_lock += end_lock - begin_lock
-        sum_atomic += end_atomic - begin_atomic
-        sum_commit += end_commit - begin_commit
-        sum_push += end_push - begin_push
-        if repetitions % 100 == 0:
-            print("RESULT_TOTAL", sum_total)
-            print("RESULT_LOCK", sum_lock)
-            print("RESULT_ATOMIC", sum_atomic)
-            print("RESULT_COMMIT", sum_commit)
-            print("RESULT_PUSH", sum_push)
-
-        return None
-
-    except Exception:
-        # Report failure to the user
-        print("Failure!")
         import traceback
 
         traceback.print_exc()
@@ -265,7 +172,7 @@ def delete_node(client: Client, id: str, write_event: dict) -> Optional[dict]:
 
 ops: Dict[str, Callable[[Client, str, dict], Optional[dict]]] = {
     # "create_node": create_node,
-    "set_data": set_data,
+    # "set_data": set_data,
     "delete_node": delete_node,
     # "deregister_session": deregister_session,
 }
