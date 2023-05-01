@@ -16,6 +16,8 @@ from functions.aws.control.distributor_events import (
     DistributorDeleteNode,
     DistributorSetData,
 )
+from functions.aws.operations import Executor
+from functions.aws.operations import builder as operations_builder
 
 mandatory_event_fields = [
     "op",
@@ -70,101 +72,24 @@ WRITER_ID = 0
 """
 
 
-def create_node(client: Client, id: str, write_event: dict) -> Optional[dict]:
-
-    if not verify_event(id, write_event, ["flags"]):
-        return {"status": "failure", "reason": "incorrect_request"}
+def execute_operation(op_exec: Executor, client: Client) -> Optional[dict]:
 
     try:
-        # TODO: ephemeral
-        # TODO: sequential
-        path = get_object(write_event["path"])
-        logging.info(f"Attempting to create node at {path}")
 
-        data = get_object(write_event["data"])
+        status, error = op_exec.lock_and_read(config.system_storage)
+        if not status:
+            return error
 
-        # FIXME :limit number of attempts
-        while True:
-            timestamp = int(datetime.now().timestamp())
-            lock, node = config.system_storage.lock_node(path, timestamp)
-            if not lock:
-                sleep(2)
-            else:
-                break
-
-        # does the node exist?
-        if node is not None:
-            config.system_storage.unlock_node(path, timestamp)
-            return {"status": "failure", "path": path, "reason": "node_exists"}
-
-        # lock the parent - unless we're already at the root
-        node_path = pathlib.Path(path)
-        parent_path = node_path.parent.absolute()
-        parent_timestamp: Optional[int] = None
-        while True:
-            parent_timestamp = int(datetime.now().timestamp())
-            parent_lock, parent_node = config.system_storage.lock_node(
-                str(parent_path), parent_timestamp
-            )
-            if not lock:
-                sleep(2)
-            else:
-                break
-        # does the node does not exist?
-        if parent_node is None:
-            config.system_storage.unlock_node(str(parent_path), parent_timestamp)
-            config.system_storage.unlock_node(path, timestamp)
-            return {
-                "status": "failure",
-                "path": str(parent_path),
-                "reason": "node_doesnt_exist",
-            }
-
-        counter = config.system_storage.increase_system_counter(WRITER_ID)
-        if counter is None:
-            return {"status": "failure", "reason": "unknown"}
-
-        # FIXME: epoch
-        # store the created and the modified version counter
-        node = Node(path)
-        node.created = Version(counter, None)
-        node.modified = Version(counter, None)
-        node.children = []
-        # we propagate data to another queue, we should use the already
-        # base64-encoded data
-        node.data_b64 = data
-
-        # FIXME: make both operations concurrently
-        # unlock parent
-        # parent now has one child more
-        parent_node.children.append(pathlib.Path(path).name)
-        config.system_storage.commit_node(
-            parent_node, parent_timestamp, set([NodeDataType.CHILDREN])
-        )
-        # commit node
-        config.system_storage.commit_node(
-            node,
-            timestamp,
-            set([NodeDataType.CREATED, NodeDataType.MODIFIED, NodeDataType.CHILDREN]),
-        )
-        # FIXME: distributor - make sure both have the same version
-        # config.user_storage.write(node)
-        # config.user_storage.update(parent_node, set([NodeDataType.CHILDREN]))
+        # FIXME: revrse the order here
+        status, error = op_exec.commit_and_unlock(config.system_storage)
+        if not status:
+            return error
 
         assert config.distributor_queue
-        config.distributor_queue.push(
-            counter,
-            DistributorCreateNode(client.session_id, node, parent_node),
-            client,
-        )
+        op_exec.distributor_push(client, config.distributor_queue)
 
         return None
-        # FIXME: version
-        # return {
-        #    "status": "success",
-        #    "path": path,
-        #    "system_counter": node.created.system.serialize(),
-        # }
+
     except Exception:
         # Report failure to the user
         logging.error("Failure!")
@@ -361,7 +286,7 @@ def delete_node(client: Client, id: str, write_event: dict) -> Optional[dict]:
 
 
 ops: Dict[str, Callable[[Client, str, dict], Optional[dict]]] = {
-    "create_node": create_node,
+    # "create_node": create_node,
     "set_data": set_data,
     "delete_node": delete_node,
     "deregister_session": deregister_session,
@@ -382,6 +307,7 @@ def handler(event: dict, context):
     StorageStatistics.instance().reset()
     for record in events:
 
+        # FIXME: abstract away, hide the DynamoDB conversion
         if "dynamodb" in record and record["eventName"] == "INSERT":
             write_event = record["dynamodb"]["NewImage"]
             event_id = record["eventID"]
@@ -399,19 +325,16 @@ def handler(event: dict, context):
 
         client = Client.deserialize(write_event)
 
-        op = get_object(write_event["op"])
-        if op not in ops:
-            logging.error(
-                "Unknown operation {op} with ID {id}, "
-                "timestamp {timestamp}".format(
-                    op=get_object(write_event["op"]),
-                    id=event_id,
-                    timestamp=write_event["timestamp"],
-                )
-            )
+        # FIXME: hide DynamoDB serialization somewhere else
+        parsed_event = {x: get_object(y) for x, y in write_event.items()}
+        op = parsed_event["op"]
+        executor, error = operations_builder(op, event_id, parsed_event)
+        if executor is None:
+            config.client_channel.notify(client, error)
             continue
 
-        ret = ops[op](client, event_id, write_event)
+        ret = execute_operation(executor, client)
+
         if ret:
             if ret["status"] == "failure":
                 logging.error(f"Failed processing write event {event_id}: {ret}")

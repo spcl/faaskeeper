@@ -14,7 +14,9 @@ from .distributor_events import DistributorEvent
 
 class DistributorQueue(ABC):
     @abstractmethod
-    def push(self, counter: SystemCounter, event: DistributorEvent, client: Client):
+    def push(
+        self, counter: SystemCounter, event: DistributorEvent, client: Client
+    ) -> None:
         pass
 
 
@@ -26,7 +28,7 @@ class DistributorQueueDynamo(DistributorQueue):
     # FIXME: remove from here ip, port
     def push(self, counter: SystemCounter, event: DistributorEvent, client: Client):
         """
-            We must use a single shard - everything is serialized.
+        We must use a single shard - everything is serialized.
         """
         counter_val = counter.sum
 
