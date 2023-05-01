@@ -23,6 +23,7 @@ from functions.aws.control.distributor_events import (
 )
 from functions.aws.control.distributor_queue import DistributorQueue
 from functions.aws.model import SystemStorage
+from functions.aws.stats import TimingStatistics
 
 
 class Executor(ABC):
@@ -183,6 +184,8 @@ class DeregisterSessionExecutor(Executor):
 class SetDataExecutor(Executor):
     def __init__(self, op: SetData):
         super().__init__(op)
+        self._stats = TimingStatistics.instance()
+        self._begin = 0.0
 
     @property
     def op(self) -> SetData:
@@ -192,6 +195,7 @@ class SetDataExecutor(Executor):
 
         path = self.op.path
         logging.info(f"Attempting to write data at {path}")
+        self._begin = time.time()
 
         begin_lock = time.time()
         # FIXME :limit number of attempts
@@ -203,7 +207,7 @@ class SetDataExecutor(Executor):
             else:
                 break
         end_lock = time.time()
-        logging.info(f"Acquired lock at {path}")
+        self._stats.add_result("lock", end_lock - begin_lock)
 
         # does the node exist?
         if self._system_node is None:
@@ -223,16 +227,13 @@ class SetDataExecutor(Executor):
         begin_push = time.time()
 
         assert distributor_queue
-        print(f"start pushing update")
         distributor_queue.push(
             self._counter,
             DistributorSetData(client.session_id, self._system_node),
             client,
         )
         end_push = time.time()
-        logging.info(f"Finished pushing update")
-
-        end = time.time()
+        self._stats.add_result("push", end_push - begin_push)
 
     def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
 
@@ -244,40 +245,23 @@ class SetDataExecutor(Executor):
         if self._counter is None:
             return (False, {"status": "failure", "reason": "unknown"})
         end_atomic = time.time()
-        logging.info(f"Incremented system counter")
+        self._stats.add_result("atomic", end_atomic - begin_atomic)
 
+        begin_commit = time.time()
         # store only the modified version counter
         # the new data will be written by the distributor
         self._system_node.modified = Version(self._counter, None)
         self._system_node.data_b64 = self.op.data_b64
-        logging.info(f"Finished commit preparation")
-
-        begin_commit = time.time()
         if not system_storage.commit_node(
             self._system_node, self._timestamp, set([NodeDataType.MODIFIED])
         ):
             return (False, {"status": "failure", "reason": "unknown"})
         end_commit = time.time()
-        logging.info(f"Finished commit")
+        self._stats.add_result("commit", end_commit - begin_commit)
 
-        # global repetitions
-        # global sum_total
-        # global sum_lock
-        # global sum_atomic
-        # global sum_commit
-        # global sum_push
-        # repetitions += 1
-        # sum_total += end - begin
-        # sum_lock += end_lock - begin_lock
-        # sum_atomic += end_atomic - begin_atomic
-        # sum_commit += end_commit - begin_commit
-        # sum_push += end_push - begin_push
-        # if repetitions % 100 == 0:
-        #    print("RESULT_TOTAL", sum_total)
-        #    print("RESULT_LOCK", sum_lock)
-        #    print("RESULT_ATOMIC", sum_atomic)
-        #    print("RESULT_COMMIT", sum_commit)
-        #    print("RESULT_PUSH", sum_push)
+        end = time.time()
+        self._stats.add_result("total", end - self._begin)
+        self._stats.add_repetition()
 
         return (True, {})
 

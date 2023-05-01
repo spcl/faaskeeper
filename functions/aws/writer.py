@@ -7,15 +7,10 @@ from functions.aws.config import Config
 from functions.aws.control.channel import Client
 from functions.aws.operations import Executor
 from functions.aws.operations import builder as operations_builder
+from functions.aws.stats import TimingStatistics
 
 config = Config.instance()
-
-repetitions = 0
-sum_total = 0.0
-sum_lock = 0.0
-sum_atomic = 0.0
-sum_commit = 0.0
-sum_push = 0.0
+timing_stats = TimingStatistics.instance()
 
 
 def execute_operation(op_exec: Executor, client: Client) -> Optional[dict]:
@@ -95,6 +90,9 @@ def handler(event: dict, context):
             continue
         else:
             processed_events += 1
+
+        if timing_stats.repetitions % 100 == 0:
+            timing_stats.print()
 
     print(f"Successfully processed {processed_events} records out of {len(events)}")
     print(
