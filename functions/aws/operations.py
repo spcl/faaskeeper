@@ -253,7 +253,9 @@ class SetDataExecutor(Executor):
         logging.info(f"Finished commit preparation")
 
         begin_commit = time.time()
-        if not system_storage.commit_node(self._system_node, self._timestamp):
+        if not system_storage.commit_node(
+            self._system_node, self._timestamp, set([NodeDataType.MODIFIED])
+        ):
             return (False, {"status": "failure", "reason": "unknown"})
         end_commit = time.time()
         logging.info(f"Finished commit")
