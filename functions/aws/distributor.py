@@ -19,6 +19,7 @@ from functions.aws.control.distributor_events import (
     DistributorSetData,
 )
 from functions.aws.model.watches import Watches
+from functions.aws.stats import TimingStatistics
 
 mandatory_event_fields = [
     "op" "path",
@@ -56,13 +57,6 @@ for r in regions:
     epoch_counters[r] = set()
 executor = ThreadPoolExecutor(max_workers=2 * len(regions))
 
-repetitions = 0
-sum_total = 0.0
-sum_notify = 0.0
-sum_write = 0.0
-sum_watch = 0.0
-sum_watch_wait = 0.0
-
 
 def get_object(obj: dict):
     return next(iter(obj.values()))
@@ -84,6 +78,8 @@ def launch_watcher(region: str, json_in: dict):
 
 # def query_watch_id(region: str, node_path: str):
 #    return region_watches[region].get_watch_counters(node_path)
+
+timing_stats = TimingStatistics.instance()
 
 
 def handler(event: dict, context):
@@ -152,6 +148,8 @@ def handler(event: dict, context):
                         config.system_storage, config.user_storage, epoch_counters[r]
                     )
                 end_write = time.time()
+                timing_stats.add_result("write", end_write - begin_write)
+
                 begin_watch = time.time()
                 # start watch delivery
                 for r in regions:
@@ -168,6 +166,8 @@ def handler(event: dict, context):
                     )
 
                 end_watch = time.time()
+                timing_stats.add_result("watch", end_watch - begin_watch)
+
                 for r in regions:
                     epoch_counters[r].update(counters)
                 begin_notify = time.time()
@@ -184,6 +184,8 @@ def handler(event: dict, context):
                         {"status": "failure", "reason": "distributor failure"},
                     )
                 end_notify = time.time()
+                timing_stats.add_result("notify", end_notify - begin_notify)
+
             except Exception:
                 print("Failure!")
                 import traceback
@@ -197,27 +199,13 @@ def handler(event: dict, context):
         for f in watches_submitters:
             f.result()
         end_watch_wait = time.time()
+        timing_stats.add_result("watch_notify", end_watch_wait - begin_watch_wait)
         end = time.time()
+        timing_stats.add_result("total", end - begin)
+        timing_stats.add_repetition()
 
-        # FIXME: proper timing
-        # global repetitions
-        # global sum_total
-        # global sum_notify
-        # global sum_write
-        # global sum_watch
-        # global sum_watch_wait
-        # repetitions += 1
-        # sum_total += end - begin
-        # sum_notify += end_notify - begin_notify
-        # sum_write += end_write - begin_write
-        # sum_watch += end_watch - begin_watch
-        # sum_watch_wait += end_watch_wait - begin_watch_wait
-        # if repetitions % 100 == 0:
-        #    print("RESULT_TOTAL", sum_total)
-        #    print("RESULT_NOTIFY", sum_notify)
-        #    print("RESULT_WRITE", sum_write)
-        #    print("RESULT_WATCH_WAIT", sum_watch)
-        #    print("RESULT_WATCH_WAIT", sum_watch_wait)
+        if timing_stats.repetitions % 100 == 0:
+            timing_stats.print()
 
     except Exception:
         print("Failure!")
