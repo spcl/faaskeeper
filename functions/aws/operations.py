@@ -112,6 +112,8 @@ class CreateNodeExecutor(Executor):
         # FIXME: keep the information if base64 encoding is actually applied?
         # Important for Redis
         self._node.data_b64 = self.op.data_b64
+        # parent now has one child more
+        self._parent_node.children.append(pathlib.Path(self.op.path).name)
 
         return (True, {})
 
@@ -126,8 +128,6 @@ class CreateNodeExecutor(Executor):
 
         # FIXME: make both operations concurrently
         # unlock parent
-        # parent now has one child more
-        self._parent_node.children.append(pathlib.Path(self.op.path).name)
         system_storage.commit_node(
             self._parent_node, self._parent_timestamp, set([NodeDataType.CHILDREN])
         )
