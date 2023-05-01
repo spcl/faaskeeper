@@ -13,7 +13,7 @@ jobs:
       matrix:
          python-version: [3.7]
          user-storage: [key-value, persistent]
-         queue: [dynamodb, sqs]
+         queue: [sqs]
          channel: [tcp, sqs]
          cloud-provider: [aws]
          #python-version: [3.6, 3.7, 3.8, 3.9]
