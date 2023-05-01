@@ -23,21 +23,21 @@ class Storage(ABC):
     @abstractmethod
     def write(self, node: Node):
         """
-            Write object or set of values to the storage.
+        Write object or set of values to the storage.
         """
         pass
 
     @abstractmethod
     def update(self, node: Node, updates: Set[NodeDataType] = set()):
         """
-            Update existing object or set of values in the storage.
+        Update existing object or set of values in the storage.
         """
         pass
 
     @abstractmethod
     def delete(self, node: Node):
         """
-           Remove contents stored in the object/row in the storage.
+        Remove contents stored in the object/row in the storage.
         """
         pass
 

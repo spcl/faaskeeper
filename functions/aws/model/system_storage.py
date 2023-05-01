@@ -13,15 +13,15 @@ class Storage(ABC):
     @property
     def lock_lifetime(self) -> int:
         """
-            Clients are allowed to hold the lock for no more than 5 seconds.
-            We add 2 seconds to account for clock drift of max 1 second.
+        Clients are allowed to hold the lock for no more than 5 seconds.
+        We add 2 seconds to account for clock drift of max 1 second.
         """
         return 7
 
     @abstractmethod
     def delete_user(self, session_id: str):
         """
-            Remove contents stored in the object/row in the storage.
+        Remove contents stored in the object/row in the storage.
         """
         pass
 
@@ -123,10 +123,10 @@ class DynamoStorage(Storage):
 
     def unlock_node(self, path: str, timestamp: int) -> bool:
         """
-            We need to make sure that we're still the ones holding a timelock.
-            Then, we need to remove the timelock.
+        We need to make sure that we're still the ones holding a timelock.
+        Then, we need to remove the timelock.
 
-            We don't perform any additional updates - just unlock.
+        We don't perform any additional updates - just unlock.
         """
         return self.commit_node(Node(path), timestamp)
 
@@ -135,11 +135,11 @@ class DynamoStorage(Storage):
     ) -> bool:
 
         """
-            We need to make sure that we're still the ones holding a timelock.
-            Then, we need to remove the timelock and update counters.
+        We need to make sure that we're still the ones holding a timelock.
+        Then, we need to remove the timelock and update counters.
 
-            Depending on the usage, we always modify the modified timestamp (modify),
-            but we might also store the created timestamp (create node).
+        Depending on the usage, we always modify the modified timestamp (modify),
+        but we might also store the created timestamp (create node).
         """
 
         # FIXME: move this to the interface of control driver
