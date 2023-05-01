@@ -309,6 +309,9 @@ class DeleteNodeExecutor(Executor):
                 break
         assert self._parent_node
 
+        # remove child from parent node
+        self._parent_node.children.remove(pathlib.Path(self.op.path).name)
+
         return (True, {})
 
     def distributor_push(self, client: Client, distributor_queue: DistributorQueue):
@@ -330,9 +333,6 @@ class DeleteNodeExecutor(Executor):
         assert self._timestamp
         assert self._parent_node
         assert self._parent_timestamp
-
-        # remove child from parent node
-        self._parent_node.children.remove(pathlib.Path(self.op.path).name)
 
         # commit system storage
         # FIXME: as a transaction
