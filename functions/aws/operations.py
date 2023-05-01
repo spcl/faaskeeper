@@ -6,7 +6,7 @@ from time import sleep
 from typing import Dict, Optional, Tuple, Type, cast
 
 from faaskeeper.node import Node, NodeDataType
-from faaskeeper.operations import CreateNode, RequestOperation
+from faaskeeper.operations import CreateNode, DeregisterSession, RequestOperation
 from faaskeeper.version import Version
 from functions.aws.control.channel import Client
 from functions.aws.control.distributor_events import (
@@ -140,6 +140,39 @@ class CreateNodeExecutor(Executor):
         )
 
 
+class DeregisterSessionExecutor(Executor):
+    def __init__(self, op: DeregisterSession):
+        super().__init__(op)
+
+    @property
+    def op(self) -> DeregisterSession:
+        return cast(DeregisterSession, self._op)
+
+    def lock_and_read(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
+        return (True, {})
+
+    def distributor_push(self, client: Client, distributor_queue: DistributorQueue):
+        pass
+
+    def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
+
+        # TODO: remove ephemeral nodes
+        # FIXME: check return value
+        session_id = self.op.session_id
+        if system_storage.delete_user(session_id):
+            return (True, {"status": "success", "session_id": session_id})
+        else:
+            logging.error(f"Attempting to remove non-existing user {session_id}")
+            return (
+                False,
+                {
+                    "status": "failure",
+                    "session_id": session_id,
+                    "reason": "session_does_not_exist",
+                },
+            )
+
+
 def builder(
     operation: str, event_id: str, event: dict
 ) -> Tuple[Optional[Executor], dict]:
@@ -148,7 +181,7 @@ def builder(
         "create_node": (CreateNode, CreateNodeExecutor),
         # "set_data": SetDataExecutor,
         # "delete_node": DeleteNodeExecutor,
-        # "deregister_session": DeregisterSessionExecutor,
+        "deregister_session": (DeregisterSession, DeregisterSessionExecutor),
     }
 
     if operation not in ops:

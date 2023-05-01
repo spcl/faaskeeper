@@ -76,19 +76,19 @@ def execute_operation(op_exec: Executor, client: Client) -> Optional[dict]:
 
     try:
 
-        status, error = op_exec.lock_and_read(config.system_storage)
+        status, ret = op_exec.lock_and_read(config.system_storage)
         if not status:
-            return error
+            return ret
 
         # FIXME: revrse the order here
-        status, error = op_exec.commit_and_unlock(config.system_storage)
-        if not status:
-            return error
+        status, ret = op_exec.commit_and_unlock(config.system_storage)
+        if not ret:
+            return ret
 
         assert config.distributor_queue
         op_exec.distributor_push(client, config.distributor_queue)
 
-        return None
+        return ret
 
     except Exception:
         # Report failure to the user
@@ -96,28 +96,6 @@ def execute_operation(op_exec: Executor, client: Client) -> Optional[dict]:
         import traceback
 
         traceback.print_exc()
-        return {"status": "failure", "reason": "unknown"}
-
-
-def deregister_session(client: Client, id: str, write_event: dict) -> Optional[dict]:
-
-    session_id = client.session_id
-    try:
-        # TODO: remove ephemeral nodes
-        # FIXME: check return value
-        if config.system_storage.delete_user(session_id):
-            return {"status": "success", "session_id": session_id}
-        else:
-            logging.error(f"Attempting to remove non-existing user {session_id}")
-            return {
-                "status": "failure",
-                "session_id": session_id,
-                "reason": "session_does_not_exist",
-            }
-    except Exception as e:
-        # Report failure to the user
-        print("Failure!")
-        print(e)
         return {"status": "failure", "reason": "unknown"}
 
 
@@ -289,7 +267,7 @@ ops: Dict[str, Callable[[Client, str, dict], Optional[dict]]] = {
     # "create_node": create_node,
     "set_data": set_data,
     "delete_node": delete_node,
-    "deregister_session": deregister_session,
+    # "deregister_session": deregister_session,
 }
 
 
@@ -328,6 +306,7 @@ def handler(event: dict, context):
         # FIXME: hide DynamoDB serialization somewhere else
         parsed_event = {x: get_object(y) for x, y in write_event.items()}
         op = parsed_event["op"]
+
         executor, error = operations_builder(op, event_id, parsed_event)
         if executor is None:
             config.client_channel.notify(client, error)
@@ -338,13 +317,14 @@ def handler(event: dict, context):
         if ret:
             if ret["status"] == "failure":
                 logging.error(f"Failed processing write event {event_id}: {ret}")
-            # Failure - notify client
+            else:
+                processed_events += 1
             config.client_channel.notify(client, ret)
             continue
         else:
             processed_events += 1
 
-    # print(f"Successfully processed {processed_events} records out of {len(events)}")
+    print(f"Successfully processed {processed_events} records out of {len(events)}")
     print(
         f"Request: {context.aws_request_id} "
         f"Read: {StorageStatistics.instance().read_units}\t"
