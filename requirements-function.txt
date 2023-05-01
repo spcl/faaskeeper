@@ -1,1 +1,1 @@
-git+https://github.com/mcopik/faaskeeper-python.git@feature/new_algorithm
+git+https://github.com/mcopik/faaskeeper-python.git@main

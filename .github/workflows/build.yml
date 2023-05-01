@@ -29,7 +29,7 @@ jobs:
           ./install.py --without-client-library
       - name: Install FaaSKeeper client library
         run: |
-          source python-venv/bin/activate && pip install git+https://${{secrets.GH_ACCESS_TOKEN}}@github.com/mcopik/faaskeeper-python.git@dev --upgrade
+          source python-venv/bin/activate && pip install git+https://${{secrets.GH_ACCESS_TOKEN}}@github.com/mcopik/faaskeeper-python.git --upgrade
       - name: Lint with flake8
         run: |
           source python-venv/bin/activate && tools/linting.py functions
