@@ -62,7 +62,7 @@ class DistributorCreateNode(DistributorEvent):
 
     def serialize(self, serializer, base64_encoded=True) -> dict:
         """We must use JSON.
-            IP and port are already serialized.
+        IP and port are already serialized.
         """
 
         # FIXME: unify serialization - proper binary type for b64-encoded
@@ -141,7 +141,7 @@ class DistributorSetData(DistributorEvent):
 
     def serialize(self, serializer, base64_encoded=True) -> dict:
         """We must use JSON.
-            IP and port are already serialized.
+        IP and port are already serialized.
         """
         data = {
             "type": serializer.serialize(self.type.value),
@@ -177,8 +177,8 @@ class DistributorSetData(DistributorEvent):
     ) -> Optional[dict]:
         # FIXME: update
         """
-            On DynamoDB we skip updating the created version as it doesn't change.
-            On S3, we need to write this every single time.
+        On DynamoDB we skip updating the created version as it doesn't change.
+        On S3, we need to write this every single time.
         """
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.node, set([NodeDataType.MODIFIED, NodeDataType.DATA]))
@@ -208,7 +208,7 @@ class DistributorDeleteNode(DistributorEvent):
 
     def serialize(self, serializer, base64_encoded=True) -> dict:
         """We must use JSON.
-            IP and port are already serialized.
+        IP and port are already serialized.
         """
         return {
             "type": serializer.serialize(self.type.value),

@@ -13,28 +13,28 @@ class Storage(ABC):
     @abstractmethod
     def write(self, key: str, data: Union[dict, bytes]):
         """
-            Write object or set of values to the storage.
+        Write object or set of values to the storage.
         """
         pass
 
     @abstractmethod
     def update(self, key: str, data: dict):
         """
-            Update existing object or set of values in the storage.
+        Update existing object or set of values in the storage.
         """
         pass
 
     @abstractmethod
     def read(self, key: str):
         """
-            Read contents stored in the object/row in the storage.
+        Read contents stored in the object/row in the storage.
         """
         pass
 
     @abstractmethod
     def delete(self, key: str):
         """
-            Remove contents stored in the object/row in the storage.
+        Remove contents stored in the object/row in the storage.
         """
         pass
 

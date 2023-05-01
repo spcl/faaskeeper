@@ -169,12 +169,14 @@ def handler(event: dict, context):
                 if ret:
                     # notify client about success
                     config.client_channel.notify(
-                        client, ret,
+                        client,
+                        ret,
                     )
                     processed_events += 1
                 else:
                     config.client_channel.notify(
-                        client, {"status": "failure", "reason": "distributor failured"},
+                        client,
+                        {"status": "failure", "reason": "distributor failured"},
                     )
                 end_notify = time.time()
             except Exception:
@@ -183,7 +185,8 @@ def handler(event: dict, context):
 
                 traceback.print_exc()
                 config.client_channel.notify(
-                    client, {"status": "failure", "reason": "distributor failured"},
+                    client,
+                    {"status": "failure", "reason": "distributor failured"},
                 )
         begin_watch_wait = time.time()
         for f in watches_submitters:
