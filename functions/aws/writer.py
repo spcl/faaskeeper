@@ -21,13 +21,12 @@ def execute_operation(op_exec: Executor, client: Client) -> Optional[dict]:
         if not status:
             return ret
 
-        # FIXME: revrse the order here
+        assert config.distributor_queue
+        op_exec.distributor_push(client, config.distributor_queue)
+
         status, ret = op_exec.commit_and_unlock(config.system_storage)
         if not status:
             return ret
-
-        assert config.distributor_queue
-        op_exec.distributor_push(client, config.distributor_queue)
 
         return ret
 
