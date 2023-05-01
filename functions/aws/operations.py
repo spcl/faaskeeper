@@ -77,10 +77,10 @@ class CreateNodeExecutor(Executor):
         self._parent_timestamp: Optional[int] = None
         while True:
             self._parent_timestamp = int(datetime.now().timestamp())
-            _, self._parent_node = system_storage.lock_node(
+            parent_lock, self._parent_node = system_storage.lock_node(
                 str(parent_path), self._parent_timestamp
             )
-            if not lock:
+            if not parent_lock:
                 sleep(1)
             else:
                 break
@@ -282,6 +282,95 @@ class SetDataExecutor(Executor):
         return (True, {})
 
 
+class DeleteNodeExecutor(Executor):
+    def __init__(self, op: DeleteNode):
+        super().__init__(op)
+
+    @property
+    def op(self) -> DeleteNode:
+        return cast(DeleteNode, self._op)
+
+    def lock_and_read(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
+
+        path = self.op.path
+        logging.info(f"Attempting to delete node at {path}")
+
+        # FIXME :limit number of attempts
+        while True:
+            self._timestamp = int(datetime.now().timestamp())
+            lock, self._node = system_storage.lock_node(path, self._timestamp)
+            if not lock:
+                sleep(2)
+            else:
+                break
+
+        # does the node not exist?
+        if self._node is None:
+            system_storage.unlock_node(path, self._timestamp)
+            return (
+                False,
+                {"status": "failure", "path": path, "reason": "node_doesnt_exist"},
+            )
+
+        if len(self._node.children):
+            system_storage.unlock_node(path, self._timestamp)
+            return (False, {"status": "failure", "path": path, "reason": "not_empty"})
+
+        # lock the parent - unless we're already at the root
+        node_path = pathlib.Path(path)
+        parent_path = node_path.parent.absolute()
+        self._parent_timestamp: Optional[int] = None
+        while True:
+            self._parent_timestamp = int(datetime.now().timestamp())
+            parent_lock, self._parent_node = system_storage.lock_node(
+                str(parent_path), self._parent_timestamp
+            )
+            if not parent_lock:
+                sleep(2)
+            else:
+                break
+        assert self._parent_node
+
+        return (True, {})
+
+    def distributor_push(self, client: Client, distributor_queue: DistributorQueue):
+
+        assert self._counter
+        assert self._node
+        assert self._parent_node
+
+        assert distributor_queue
+        distributor_queue.push(
+            self._counter,
+            DistributorDeleteNode(client.session_id, self._node, self._parent_node),
+            client,
+        )
+
+    def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
+
+        assert self._node
+        assert self._timestamp
+        assert self._parent_node
+        assert self._parent_timestamp
+
+        # FIXME: we shouldn't use writer ID anymore
+        self._counter = system_storage.increase_system_counter(0)
+        if self._counter is None:
+            return (False, {"status": "failure", "reason": "unknown"})
+
+        # remove child from parent node
+        self._parent_node.children.remove(pathlib.Path(self.op.path).name)
+
+        # commit system storage
+        # FIXME: as a transaction
+        system_storage.commit_node(
+            self._parent_node, self._parent_timestamp, set([NodeDataType.CHILDREN])
+        )
+        system_storage.delete_node(self._node, self._timestamp)
+
+        return (True, {})
+
+
 def builder(
     operation: str, event_id: str, event: dict
 ) -> Tuple[Optional[Executor], dict]:
@@ -289,7 +378,7 @@ def builder(
     ops: Dict[str, Tuple[Type[RequestOperation], Type[Executor]]] = {
         "create_node": (CreateNode, CreateNodeExecutor),
         "set_data": (SetData, SetDataExecutor),
-        # "delete_node": (DeleteNode, DeleteNodeExecutor),
+        "delete_node": (DeleteNode, DeleteNodeExecutor),
         "deregister_session": (DeregisterSession, DeregisterSessionExecutor),
     }
 

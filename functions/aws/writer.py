@@ -1,31 +1,12 @@
 import json
 import logging
-import pathlib
-import time
-from datetime import datetime
-from time import sleep
-from typing import Callable, Dict, List, Optional
+from typing import Optional
 
-from faaskeeper.node import Node, NodeDataType
 from faaskeeper.stats import StorageStatistics
-from faaskeeper.version import Version
 from functions.aws.config import Config
 from functions.aws.control.channel import Client
-from functions.aws.control.distributor_events import (
-    DistributorCreateNode,
-    DistributorDeleteNode,
-    DistributorSetData,
-)
 from functions.aws.operations import Executor
 from functions.aws.operations import builder as operations_builder
-
-mandatory_event_fields = [
-    "op",
-    "path",
-    "session_id",
-    "version",
-    "data",
-]
 
 config = Config.instance()
 
@@ -35,41 +16,6 @@ sum_lock = 0.0
 sum_atomic = 0.0
 sum_commit = 0.0
 sum_push = 0.0
-
-
-def verify_event(id: str, write_event: dict, flags: List[str] = None) -> bool:
-
-    events = []
-    if flags is not None:
-        events = [*mandatory_event_fields, *flags]
-    else:
-        events = [*mandatory_event_fields]
-
-    """
-        Handle malformed events correctly.
-    """
-    if any(k not in write_event.keys() for k in events):
-        logging.error(
-            "Incorrect event with ID {id}, timestamp {timestamp}".format(
-                id=id, timestamp=write_event["timestamp"]
-            )
-        )
-        return False
-    return True
-
-
-# FIXME: proper config
-WRITER_ID = 0
-
-"""
-    The function has the following responsibilities:
-    1) Create new node, returning success or failure if the node exists
-    2) Set-up ACL permission on the node.
-    3) Add the list to user's nodelist in case of an ephemeral node.
-    4) Create sequential node by appending newest version.
-    5) Create parents nodes to make sure the entire path exists.
-    6) Look-up watches in a seperate table.
-"""
 
 
 def execute_operation(op_exec: Executor, client: Client) -> Optional[dict]:
@@ -99,87 +45,6 @@ def execute_operation(op_exec: Executor, client: Client) -> Optional[dict]:
         return {"status": "failure", "reason": "unknown"}
 
 
-def delete_node(client: Client, id: str, write_event: dict) -> Optional[dict]:
-
-    # if not verify_event(id, write_event, verbose_output, ["flags"]):
-    #    return None
-
-    try:
-        # TODO: ephemeral
-        # TODO: sequential
-        path = get_object(write_event["path"])
-        logging.info(f"Attempting to create node at {path}")
-
-        # FIXME :limit number of attempts
-        while True:
-            timestamp = int(datetime.now().timestamp())
-            lock, node = config.system_storage.lock_node(path, timestamp)
-            if not lock:
-                sleep(2)
-            else:
-                break
-
-        # does the node not exist?
-        if node is None:
-            config.system_storage.unlock_node(path, timestamp)
-            return {"status": "failure", "path": path, "reason": "node_doesnt_exist"}
-
-        if len(node.children):
-            config.system_storage.unlock_node(path, timestamp)
-            return {"status": "failure", "path": path, "reason": "not_empty"}
-
-        # lock the parent - unless we're already at the root
-        node_path = pathlib.Path(path)
-        parent_path = node_path.parent.absolute()
-        parent_timestamp: Optional[int] = None
-        while True:
-            parent_timestamp = int(datetime.now().timestamp())
-            parent_lock, parent_node = config.system_storage.lock_node(
-                str(parent_path), parent_timestamp
-            )
-            if not lock:
-                sleep(2)
-            else:
-                break
-        assert parent_node
-
-        counter = config.system_storage.increase_system_counter(WRITER_ID)
-        if counter is None:
-            return {"status": "failure", "reason": "unknown"}
-
-        # remove child from parent node
-        parent_node.children.remove(pathlib.Path(path).name)
-
-        # commit system storage
-        config.system_storage.commit_node(
-            parent_node, parent_timestamp, set([NodeDataType.CHILDREN])
-        )
-        config.system_storage.delete_node(node, timestamp)
-
-        assert config.distributor_queue
-        config.distributor_queue.push(
-            counter, DistributorDeleteNode(client.session_id, node, parent_node), client
-        )
-        return None
-    except Exception:
-        # Report failure to the user
-        print("Failure!")
-        import traceback
-
-        traceback.print_exc()
-        return {"status": "failure", "reason": "unknown"}
-
-
-ops: Dict[str, Callable[[Client, str, dict], Optional[dict]]] = {
-    # "create_node": create_node,
-    # "set_data": set_data,
-    "delete_node": delete_node,
-    # "deregister_session": deregister_session,
-}
-
-
-# def get_object(obj: dict):
-#    return next(iter(obj.values()))
 def get_object(obj: dict):
     return next(iter(obj.values()))
 
