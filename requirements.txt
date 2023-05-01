@@ -4,9 +4,11 @@ python-dotenv
 #linting
 flake8==3.7.9
 flake8-boto3==0.3.0
-black==19.10b0
+black==19.10b0; python_version < '3.9'
+black==21.10b0; python_version >= '3.9'
 flake8-black==0.1.2
-mypy==0.761
+mypy==0.761; python_version < '3.9'
+mypy==0.790; python_version >= '3.9'
 mypy-boto3==1.13.24.2
 boto3-stubs[lambda]
 boto3-stubs[dynamodb]
