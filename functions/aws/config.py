@@ -6,6 +6,7 @@ from typing import Optional
 import functions.aws.control as control
 import functions.aws.model as model
 from functions.aws.control import distributor_queue
+from functions.aws.control.distributor_queue import DistributorQueue
 
 
 class Storage(Enum):
@@ -126,7 +127,7 @@ class Config:
         return self._system_storage
 
     @property
-    def distributor_queue(self) -> Optional[distributor_queue.DistributorQueue]:
+    def distributor_queue(self) -> Optional[DistributorQueue]:
         return self._distributor_queue
 
     @property
