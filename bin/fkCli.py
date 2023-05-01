@@ -199,6 +199,7 @@ def cli(config, port: int, verbose: str):
     except Exception as e:
         click.echo("Unable to close the session")
         click.echo(e)
+        return
 
     print("Session closed correctly.")
 
