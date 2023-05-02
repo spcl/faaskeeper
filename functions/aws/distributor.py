@@ -1,4 +1,3 @@
-import hashlib
 import json
 import logging
 import time
@@ -8,16 +7,11 @@ from typing import Dict, List, Set
 import boto3
 
 from faaskeeper.stats import StorageStatistics
-from faaskeeper.watch import WatchEventType, WatchType
+from faaskeeper.version import SystemCounter
+from faaskeeper.watch import WatchType
 from functions.aws.config import Config
 from functions.aws.control.channel import Client
-from functions.aws.control.distributor_events import (
-    DistributorCreateNode,
-    DistributorDeleteNode,
-    DistributorEvent,
-    DistributorEventType,
-    DistributorSetData,
-)
+from functions.aws.control.distributor_events import DistributorEventType, builder
 from functions.aws.model.watches import Watches
 from functions.aws.stats import TimingStatistics
 
@@ -93,6 +87,8 @@ def handler(event: dict, context):
         begin = time.time()
         watches_submitters: List[Future] = []
         for record in events:
+
+            counter: SystemCounter
             if "dynamodb" in record and record["eventName"] == "INSERT":
                 write_event = record["dynamodb"]["NewImage"]
                 event_type = DistributorEventType(int(write_event["type"]["N"]))
@@ -116,30 +112,25 @@ def handler(event: dict, context):
                     write_event["data"] = {
                         "B": record["messageAttributes"]["data"]["binaryValue"]
                     }
-            else:
-                raise NotImplementedError()
-
-            client = Client.deserialize(write_event)
-
-            # FIXME: hide under abstraction, boto3 deserialize
-            operation: DistributorEvent
-
-            counters = []
-            if event_type == DistributorEventType.CREATE_NODE:
-                operation = DistributorCreateNode.deserialize(write_event)
-            elif event_type == DistributorEventType.SET_DATA:
-                operation = DistributorSetData.deserialize(write_event)
-                hashed_path = hashlib.md5(operation.node.path.encode()).hexdigest()
-                counters.append(
-                    f"{hashed_path}_{WatchEventType.NODE_DATA_CHANGED.value}"
-                    f"_{operation.node.modified.system.sum}"
+                counter = SystemCounter.from_raw_data(
+                    record["attributes"]["SequenceNumber"]
                 )
-            elif event_type == DistributorEventType.DELETE_NODE:
-                operation = DistributorDeleteNode.deserialize(write_event)
             else:
                 raise NotImplementedError()
+
+            """
+                (1) Parse the incoming event.
+                (2) Extend the epoch counter.
+                (3) Apply the update.
+                (4) Distribute the watch notifications, if needed.
+                (5) Notify client.
+            """
 
             try:
+
+                client = Client.deserialize(write_event)
+
+                operation = builder(counter, event_type, write_event)
 
                 begin_write = time.time()
                 # write new data
@@ -169,7 +160,7 @@ def handler(event: dict, context):
                 timing_stats.add_result("watch", end_watch - begin_watch)
 
                 for r in regions:
-                    epoch_counters[r].update(counters)
+                    epoch_counters[r].update(operation.epoch_counters())
                 begin_notify = time.time()
                 if ret:
                     # notify client about success

@@ -260,23 +260,6 @@ class DynamoStorage(Storage):
         # strip traling comma - boto3 will not accept that
         update_expr = update_expr[:-1]
 
-        print(
-            {
-                "TableName": self._state_storage.storage_name,
-                # path to the node
-                "Key": {"path": {"S": node.path}},
-                # create timelock
-                "UpdateExpression": update_expr,
-                # lock doesn't exist or it's already expired
-                "ConditionExpression": "(attribute_exists(timelock)) "
-                "and (timelock = :mytimelock)",
-                # timelock value
-                "ExpressionAttributeValues": {
-                    ":mytimelock": {"N": str(timestamp)},
-                    **update_values,
-                },
-            }
-        )
         return {
             "TableName": self._state_storage.storage_name,
             # path to the node
@@ -475,5 +458,7 @@ class DynamoStorage(Storage):
             dynamo_node.pending_updates = self._type_deserializer.deserialize(
                 data["pendingUpdates"]
             )
+        else:
+            dynamo_node.pending_updates = []
 
         return dynamo_node

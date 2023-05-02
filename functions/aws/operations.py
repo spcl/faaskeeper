@@ -153,11 +153,13 @@ class CreateNodeExecutor(Executor):
     def distributor_push(self, client: Client, distributor_queue: DistributorQueue):
 
         assert self._parent_node
+        assert self._parent_timestamp
         self._counter = distributor_queue.push_and_count(
             DistributorCreateNode(
                 self.event_id,
                 client.session_id,
                 self._timestamp,
+                self._parent_timestamp,
                 self._node,
                 self._parent_node,
             ),
@@ -337,6 +339,7 @@ class DeleteNodeExecutor(Executor):
 
         assert self._node
         assert self._parent_node
+        assert self._parent_timestamp
 
         assert distributor_queue
         distributor_queue.push_and_count(
@@ -344,6 +347,7 @@ class DeleteNodeExecutor(Executor):
                 self.event_id,
                 client.session_id,
                 self._timestamp,
+                self._parent_timestamp,
                 self._node,
                 self._parent_node,
             ),
