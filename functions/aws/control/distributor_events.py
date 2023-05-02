@@ -19,9 +19,10 @@ class DistributorEventType(IntEnum):
 
 
 class DistributorEvent(ABC):
-    def __init__(self, event_id: str, session_id: str):
+    def __init__(self, event_id: str, session_id: str, lock_timestamp: int):
         self._session_id = session_id
         self._event_id = event_id
+        self._lock_timestamp = lock_timestamp
 
     @property
     def session_id(self) -> str:
@@ -30,6 +31,10 @@ class DistributorEvent(ABC):
     @property
     def event_id(self) -> str:
         return self._event_id
+
+    @property
+    def lock_timestamp(self) -> int:
+        return self._lock_timestamp
 
     @abstractmethod
     def serialize(self, serializer, base64_encoded=True) -> dict:
@@ -64,8 +69,15 @@ class DistributorCreateNode(DistributorEvent):
 
     _type_deserializer = TypeDeserializer()
 
-    def __init__(self, event_id: str, session_id: str, node: Node, parent_node: Node):
-        super().__init__(event_id, session_id)
+    def __init__(
+        self,
+        event_id: str,
+        session_id: str,
+        lock_timestamp: int,
+        node: Node,
+        parent_node: Node,
+    ):
+        super().__init__(event_id, session_id, lock_timestamp)
         self._node = node
         self._parent_node = parent_node
 
@@ -80,6 +92,7 @@ class DistributorCreateNode(DistributorEvent):
             "type": serializer.serialize(self.type.value),
             "session_id": serializer.serialize(self.session_id),
             "event_id": serializer.serialize(self.event_id),
+            "lock_timestamp": serializer.serialize(self.lock_timestamp),
             "path": serializer.serialize(self.node.path),
             "parent_path": serializer.serialize(self.parent.path),
             "parent_children": serializer.serialize(self.parent.children),
@@ -110,8 +123,11 @@ class DistributorCreateNode(DistributorEvent):
 
         session_id = deserializer.deserialize(event_data["session_id"])
         event_id = deserializer.deserialize(event_data["event_id"])
+        lock_timestamp = deserializer.deserialize(event_data["lock_timestamp"])
 
-        return DistributorCreateNode(event_id, session_id, node, parent_node)
+        return DistributorCreateNode(
+            event_id, session_id, lock_timestamp, node, parent_node
+        )
 
     def execute(
         self,
@@ -163,8 +179,8 @@ class DistributorSetData(DistributorEvent):
 
     _type_deserializer = TypeDeserializer()
 
-    def __init__(self, event_id: str, session_id: str, node: Node):
-        super().__init__(event_id, session_id)
+    def __init__(self, event_id: str, session_id: str, lock_timestamp: int, node: Node):
+        super().__init__(event_id, session_id, lock_timestamp)
         self._node = node
 
     def serialize(self, serializer, base64_encoded=True) -> dict:
@@ -175,6 +191,7 @@ class DistributorSetData(DistributorEvent):
             "type": serializer.serialize(self.type.value),
             "session_id": serializer.serialize(self.session_id),
             "event_id": serializer.serialize(self.event_id),
+            "lock_timestamp": serializer.serialize(self.lock_timestamp),
             "path": serializer.serialize(self.node.path),
             "counter": self.node.modified.system.version,
         }
@@ -199,8 +216,9 @@ class DistributorSetData(DistributorEvent):
 
         session_id = deserializer.deserialize(event_data["session_id"])
         event_id = deserializer.deserialize(event_data["event_id"])
+        lock_timestamp = deserializer.deserialize(event_data["lock_timestamp"])
 
-        return DistributorSetData(event_id, session_id, node)
+        return DistributorSetData(event_id, session_id, lock_timestamp, node)
 
     def execute(
         self,
@@ -247,8 +265,15 @@ class DistributorDeleteNode(DistributorEvent):
 
     _type_deserializer = TypeDeserializer()
 
-    def __init__(self, event_id: str, session_id: str, node: Node, parent_node: Node):
-        super().__init__(event_id, session_id)
+    def __init__(
+        self,
+        event_id: str,
+        session_id: str,
+        lock_timestamp: int,
+        node: Node,
+        parent_node: Node,
+    ):
+        super().__init__(event_id, session_id, lock_timestamp)
         self._node = node
         self._parent_node = parent_node
 
@@ -260,6 +285,7 @@ class DistributorDeleteNode(DistributorEvent):
             "type": serializer.serialize(self.type.value),
             "session_id": serializer.serialize(self.session_id),
             "event_id": serializer.serialize(self.event_id),
+            "lock_timestamp": serializer.serialize(self.lock_timestamp),
             "path": serializer.serialize(self.node.path),
             "parent_path": serializer.serialize(self.parent.path),
             "parent_children": serializer.serialize(self.parent.children),
@@ -278,8 +304,11 @@ class DistributorDeleteNode(DistributorEvent):
 
         session_id = deserializer.deserialize(event_data["session_id"])
         event_id = deserializer.deserialize(event_data["event_id"])
+        lock_timestamp = deserializer.deserialize(event_data["lock_timestamp"])
 
-        return DistributorDeleteNode(event_id, session_id, node, parent_node)
+        return DistributorDeleteNode(
+            event_id, session_id, lock_timestamp, node, parent_node
+        )
 
     def execute(
         self,

@@ -155,7 +155,11 @@ class CreateNodeExecutor(Executor):
         assert self._parent_node
         self._counter = distributor_queue.push_and_count(
             DistributorCreateNode(
-                self.event_id, client.session_id, self._node, self._parent_node
+                self.event_id,
+                client.session_id,
+                self._timestamp,
+                self._node,
+                self._parent_node,
             ),
             client,
         )
@@ -241,7 +245,9 @@ class SetDataExecutor(Executor):
 
         begin_push = time.time()
         self._counter = distributor_queue.push_and_count(
-            DistributorSetData(self.event_id, client.session_id, self._system_node),
+            DistributorSetData(
+                self.event_id, client.session_id, self._timestamp, self._system_node
+            ),
             client,
         )
         end_push = time.time()
@@ -335,7 +341,11 @@ class DeleteNodeExecutor(Executor):
         assert distributor_queue
         distributor_queue.push_and_count(
             DistributorDeleteNode(
-                self.event_id, client.session_id, self._node, self._parent_node
+                self.event_id,
+                client.session_id,
+                self._timestamp,
+                self._node,
+                self._parent_node,
             ),
             client,
         )
