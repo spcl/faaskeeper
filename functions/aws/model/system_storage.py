@@ -69,11 +69,21 @@ class Storage(ABC):
         pass
 
     @abstractmethod
-    def generate_delete_node(self, node: faaskeeper.node.Node, timestamp: int) -> dict:
+    def generate_delete_node(
+        self,
+        node: faaskeeper.node.Node,
+        timestamp: int,
+        update_event_id: Optional[str] = None,
+    ) -> dict:
         pass
 
     @abstractmethod
-    def delete_node(self, node: faaskeeper.node.Node, timestamp: int):
+    def delete_node(
+        self,
+        node: faaskeeper.node.Node,
+        timestamp: int,
+        update_event_id: Optional[str] = None,
+    ):
         pass
 
     @abstractmethod
@@ -82,6 +92,7 @@ class Storage(ABC):
         node: faaskeeper.node.Node,
         timestamp: int,
         updates: Set[faaskeeper.node.NodeDataType] = set(),
+        update_event_id: Optional[str] = None,
     ) -> bool:
         pass
 
@@ -91,6 +102,7 @@ class Storage(ABC):
         node: faaskeeper.node.Node,
         timestamp: int,
         updates: Set[faaskeeper.node.NodeDataType] = set(),
+        update_event_id: Optional[str] = None,
     ) -> dict:
         pass
 
@@ -195,6 +207,7 @@ class DynamoStorage(Storage):
         node: faaskeeper.node.Node,
         timestamp: int,
         updates: Set[faaskeeper.node.NodeDataType] = set(),
+        update_event_id: Optional[str] = None,
     ) -> dict:
 
         # we always commit the modified stamp
@@ -206,17 +219,50 @@ class DynamoStorage(Storage):
         if faaskeeper.node.NodeDataType.CREATED in updates:
             update_expr = f"{update_expr} cFxidSys = :createdStamp,"
             update_values[":createdStamp"] = node.created.system.version
+
+            # Initialize the list of pending updates
+            update_expr = f"{update_expr} pendingUpdates = :pendingUpdatesList,"
+            update_values[":pendingUpdatesList"] = self._type_serializer.serialize(  # type: ignore
+                [] if update_event_id is None else [update_event_id]  # type: ignore
+            )
+
+        elif update_event_id is not None:
+
+            update_expr = f"{update_expr} pendingUpdates = list_append(pendingUpdates, :newUpdate),"
+            update_values[":newUpdate"] = self._type_serializer.serialize(  # type: ignore
+                [update_event_id]  # type: ignore
+            )
+
         if faaskeeper.node.NodeDataType.MODIFIED in updates:
             update_expr = f"{update_expr} mFxidSys = :modifiedStamp,"
             update_values[":modifiedStamp"] = node.modified.system.version
+
         if faaskeeper.node.NodeDataType.CHILDREN in updates:
             update_expr = f"{update_expr} children = :children,"
             update_values[":children"] = self._type_serializer.serialize(  # type: ignore
                 node.children  # type: ignore
             )
+
         # strip traling comma - boto3 will not accept that
         update_expr = update_expr[:-1]
 
+        print(
+            {
+                "TableName": self._state_storage.storage_name,
+                # path to the node
+                "Key": {"path": {"S": node.path}},
+                # create timelock
+                "UpdateExpression": update_expr,
+                # lock doesn't exist or it's already expired
+                "ConditionExpression": "(attribute_exists(timelock)) "
+                "and (timelock = :mytimelock)",
+                # timelock value
+                "ExpressionAttributeValues": {
+                    ":mytimelock": {"N": str(timestamp)},
+                    **update_values,
+                },
+            }
+        )
         return {
             "TableName": self._state_storage.storage_name,
             # path to the node
@@ -238,6 +284,7 @@ class DynamoStorage(Storage):
         node: faaskeeper.node.Node,
         timestamp: int,
         updates: Set[faaskeeper.node.NodeDataType] = set(),
+        update_event_id: Optional[str] = None,
     ) -> bool:
 
         """
@@ -253,7 +300,7 @@ class DynamoStorage(Storage):
 
             # https://github.com/python/mypy/issues/6799
             ret = self._state_storage._dynamodb.update_item(  # type: ignore
-                **self.generate_commit_node(node, timestamp, updates),
+                **self.generate_commit_node(node, timestamp, updates, update_event_id),
                 ReturnConsumedCapacity="TOTAL",  # type: ignore
             )
             StorageStatistics.instance().add_write_units(
@@ -314,7 +361,12 @@ class DynamoStorage(Storage):
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return None
 
-    def generate_delete_node(self, node: faaskeeper.node.Node, timestamp: int) -> dict:
+    def generate_delete_node(
+        self,
+        node: faaskeeper.node.Node,
+        timestamp: int,
+        update_event_id: Optional[str] = None,
+    ) -> dict:
 
         return {
             "TableName": self._state_storage.storage_name,
@@ -327,11 +379,16 @@ class DynamoStorage(Storage):
             "ExpressionAttributeValues": {":mytimelock": {"N": str(timestamp)}},
         }
 
-    def delete_node(self, node: faaskeeper.node.Node, timestamp: int):
+    def delete_node(
+        self,
+        node: faaskeeper.node.Node,
+        timestamp: int,
+        update_event_id: Optional[str] = None,
+    ):
 
         # https://github.com/python/mypy/issues/6799
         ret = self._state_storage._dynamodb.delete_item(  # type: ignore
-            **self.generate_delete_node(node, timestamp),
+            **self.generate_delete_node(node, timestamp, update_event_id),
             ReturnConsumedCapacity="TOTAL",
         )
         StorageStatistics.instance().add_write_units(
@@ -363,15 +420,19 @@ class DynamoStorage(Storage):
             dynamo_node = Node(node, Node.Status.EXISTS)
 
         # FIXME: parse list updates
-        created = SystemCounter.from_provider_schema(data["cFxidSys"])  # type: ignore
-        dynamo_node.node.created = Version(
-            created,
-            None
-            # EpochCounter.from_provider_schema(data["cFxidEpoch"]),
-        )
-        modified = SystemCounter.from_provider_schema(data["mFxidSys"])  # type: ignore
-        dynamo_node.node.modified = Version(modified, None)
-        dynamo_node.node.children = self._type_deserializer.deserialize(
-            data["children"]
-        )
+        if "cFxidSys" in data:
+            created = SystemCounter.from_provider_schema(data["cFxidSys"])  # type: ignore
+            dynamo_node.node.created = Version(
+                created,
+                None
+                # EpochCounter.from_provider_schema(data["cFxidEpoch"]),
+            )
+
+        if "mFxidSys" in data:
+            modified = SystemCounter.from_provider_schema(data["mFxidSys"])  # type: ignore
+            dynamo_node.node.modified = Version(modified, None)
+            dynamo_node.node.children = self._type_deserializer.deserialize(
+                data["children"]
+            )
+
         return dynamo_node

@@ -138,6 +138,7 @@ class CreateNodeExecutor(Executor):
                             NodeDataType.CHILDREN,
                         ]
                     ),
+                    self.event_id,
                 ),
                 system_storage.generate_commit_node(
                     self._parent_node,
@@ -256,7 +257,10 @@ class SetDataExecutor(Executor):
         # the new data will be written by the distributor
         self._system_node.modified = Version(self._counter, None)
         if not system_storage.commit_node(
-            self._system_node, self._timestamp, set([NodeDataType.MODIFIED])
+            self._system_node,
+            self._timestamp,
+            set([NodeDataType.MODIFIED]),
+            self.event_id,
         ):
             return (False, {"status": "failure", "reason": "unknown"})
         end_commit = time.time()
@@ -351,7 +355,11 @@ class DeleteNodeExecutor(Executor):
                     set([NodeDataType.CHILDREN]),
                 )
             ],
-            [system_storage.generate_delete_node(self._node, self._timestamp)],
+            [
+                system_storage.generate_delete_node(
+                    self._node, self._timestamp, self.event_id
+                )
+            ],
         )
 
         return (True, {})
