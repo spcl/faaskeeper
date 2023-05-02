@@ -36,7 +36,7 @@ class Node:
 
     @property
     def pending_updates(self) -> List[str]:
-        assert self._pending_updates
+        assert self._pending_updates is not None
         return self._pending_updates
 
     @pending_updates.setter

@@ -168,7 +168,10 @@ class DistributorCreateNode(DistributorEvent):
             }
 
         # The node is no longer locked, but the update is not there
-        if system_node.pending_updates[0] != self.event_id:
+        if (
+            len(system_node.pending_updates) > 0
+            and system_node.pending_updates[0] != self.event_id
+        ):
 
             if (
                 system_node.Status == SystemNode.Status.LOCKED
@@ -313,7 +316,10 @@ class DistributorSetData(DistributorEvent):
             }
 
         # The node is no longer locked, but the update is not there
-        if system_node.pending_updates[0] != self.event_id:
+        if (
+            len(system_node.pending_updates) > 0
+            and system_node.pending_updates[0] != self.event_id
+        ):
 
             if (
                 system_node.Status == SystemNode.Status.LOCKED
@@ -454,7 +460,10 @@ class DistributorDeleteNode(DistributorEvent):
             }
 
         # The node is no longer locked, but the update is not there
-        if system_node.pending_updates[0] != self.event_id:
+        if (
+            len(system_node.pending_updates) > 0
+            and system_node.pending_updates[0] != self.event_id
+        ):
 
             if (
                 system_node.Status == SystemNode.Status.LOCKED
