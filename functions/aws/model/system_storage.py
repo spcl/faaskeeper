@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import namedtuple
 from enum import Enum
-from typing import Optional, Set, Tuple
+from typing import List, Optional, Set, Tuple
 
 from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 
@@ -23,6 +23,7 @@ class Node:
     def __init__(self, node: faaskeeper.node.Node, status: Status):
         self._node = node
         self._status = status
+        self._pending_updates: List[str] = []
 
     @property
     def lock(self) -> Optional["Node.Lock"]:
@@ -68,6 +69,10 @@ class Storage(ABC):
         pass
 
     @abstractmethod
+    def generate_delete_node(self, node: faaskeeper.node.Node, timestamp: int) -> dict:
+        pass
+
+    @abstractmethod
     def delete_node(self, node: faaskeeper.node.Node, timestamp: int):
         pass
 
@@ -78,6 +83,19 @@ class Storage(ABC):
         timestamp: int,
         updates: Set[faaskeeper.node.NodeDataType] = set(),
     ) -> bool:
+        pass
+
+    @abstractmethod
+    def generate_commit_node(
+        self,
+        node: faaskeeper.node.Node,
+        timestamp: int,
+        updates: Set[faaskeeper.node.NodeDataType] = set(),
+    ) -> dict:
+        pass
+
+    @abstractmethod
+    def commit_nodes(self, updates: List[dict], deletions: List[dict] = []) -> bool:
         pass
 
     @abstractmethod
@@ -132,7 +150,6 @@ class DynamoStorage(Storage):
                 ReturnValues="ALL_NEW",
                 ReturnConsumedCapacity="TOTAL",
             )
-            # print("lock", ret["ConsumedCapacity"])
             StorageStatistics.instance().add_write_units(
                 ret["ConsumedCapacity"]["CapacityUnits"]
             )
@@ -173,6 +190,49 @@ class DynamoStorage(Storage):
         """
         return self.commit_node(faaskeeper.node.Node(path), timestamp)
 
+    def generate_commit_node(
+        self,
+        node: faaskeeper.node.Node,
+        timestamp: int,
+        updates: Set[faaskeeper.node.NodeDataType] = set(),
+    ) -> dict:
+
+        # we always commit the modified stamp
+        update_expr = "REMOVE timelock "
+        if len(updates):
+            update_expr = f"{update_expr} SET "
+        update_values = {}
+
+        if faaskeeper.node.NodeDataType.CREATED in updates:
+            update_expr = f"{update_expr} cFxidSys = :createdStamp,"
+            update_values[":createdStamp"] = node.created.system.version
+        if faaskeeper.node.NodeDataType.MODIFIED in updates:
+            update_expr = f"{update_expr} mFxidSys = :modifiedStamp,"
+            update_values[":modifiedStamp"] = node.modified.system.version
+        if faaskeeper.node.NodeDataType.CHILDREN in updates:
+            update_expr = f"{update_expr} children = :children,"
+            update_values[":children"] = self._type_serializer.serialize(  # type: ignore
+                node.children  # type: ignore
+            )
+        # strip traling comma - boto3 will not accept that
+        update_expr = update_expr[:-1]
+
+        return {
+            "TableName": self._state_storage.storage_name,
+            # path to the node
+            "Key": {"path": {"S": node.path}},
+            # create timelock
+            "UpdateExpression": update_expr,
+            # lock doesn't exist or it's already expired
+            "ConditionExpression": "(attribute_exists(timelock)) "
+            "and (timelock = :mytimelock)",
+            # timelock value
+            "ExpressionAttributeValues": {
+                ":mytimelock": {"N": str(timestamp)},
+                **update_values,
+            },
+        }
+
     def commit_node(
         self,
         node: faaskeeper.node.Node,
@@ -190,46 +250,42 @@ class DynamoStorage(Storage):
 
         # FIXME: move this to the interface of control driver
         try:
-            # we always commit the modified stamp
-            update_expr = "REMOVE timelock "
-            if len(updates):
-                update_expr = f"{update_expr} SET "
-            update_values = {}
 
-            if faaskeeper.node.NodeDataType.CREATED in updates:
-                update_expr = f"{update_expr} cFxidSys = :createdStamp,"
-                update_values[":createdStamp"] = node.created.system.version
-            if faaskeeper.node.NodeDataType.MODIFIED in updates:
-                update_expr = f"{update_expr} mFxidSys = :modifiedStamp,"
-                update_values[":modifiedStamp"] = node.modified.system.version
-            if faaskeeper.node.NodeDataType.CHILDREN in updates:
-                update_expr = f"{update_expr} children = :children,"
-                update_values[":children"] = self._type_serializer.serialize(  # type: ignore
-                    node.children  # type: ignore
-                )
-            # strip traling comma - boto3 will not accept that
-            update_expr = update_expr[:-1]
-
-            ret = self._state_storage._dynamodb.update_item(
-                TableName=self._state_storage.storage_name,
-                # path to the node
-                Key={"path": {"S": node.path}},
-                # create timelock
-                UpdateExpression=update_expr,
-                # lock doesn't exist or it's already expired
-                ConditionExpression="(attribute_exists(timelock)) "
-                "and (timelock = :mytimelock)",
-                # timelock value
-                ExpressionAttributeValues={
-                    ":mytimelock": {"N": str(timestamp)},
-                    **update_values,
-                },
-                ReturnConsumedCapacity="TOTAL",
+            # https://github.com/python/mypy/issues/6799
+            ret = self._state_storage._dynamodb.update_item(  # type: ignore
+                **self.generate_commit_node(node, timestamp, updates),
+                ReturnConsumedCapacity="TOTAL",  # type: ignore
             )
-            # print("commit", ret["ConsumedCapacity"])
             StorageStatistics.instance().add_write_units(
                 ret["ConsumedCapacity"]["CapacityUnits"]
             )
+            return True
+        except self._state_storage.errorSupplier.ConditionalCheckFailedException:
+            return False
+
+    def commit_nodes(self, updates: List[dict], deletions: List[dict] = []) -> bool:
+
+        try:
+            transaction_items = []
+
+            for update in updates:
+                transaction_items.append({"Update": update})
+
+            for deletion in deletions:
+                transaction_items.append({"Delete": deletion})
+
+            ret = self._state_storage._dynamodb.transact_write_items(
+                TransactItems=transaction_items, ReturnConsumedCapacity="TOTAL"  # type: ignore
+            )
+
+            for table in ret["ConsumedCapacity"]:
+                StorageStatistics.instance().add_write_units(
+                    table["WriteCapacityUnits"]
+                )
+                if "ReadCapacityUnits" in table:
+                    StorageStatistics.instance().add_read_units(
+                        table["ReadCapacityUnits"]  # type: ignore
+                    )
             return True
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return False
@@ -248,7 +304,7 @@ class DynamoStorage(Storage):
                 ReturnValues="ALL_NEW",
                 ReturnConsumedCapacity="TOTAL",
             )
-            # print("counter", ret["ConsumedCapacity"])
+
             StorageStatistics.instance().add_write_units(
                 ret["ConsumedCapacity"]["CapacityUnits"]
             )
@@ -258,17 +314,24 @@ class DynamoStorage(Storage):
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return None
 
-    def delete_node(self, node: faaskeeper.node.Node, timestamp: int):
+    def generate_delete_node(self, node: faaskeeper.node.Node, timestamp: int) -> dict:
 
-        ret = self._state_storage._dynamodb.delete_item(
-            TableName=self._state_storage.storage_name,
+        return {
+            "TableName": self._state_storage.storage_name,
             # path to the node
-            Key={"path": {"S": node.path}},
+            "Key": {"path": {"S": node.path}},
             # lock exists and it's ours
-            ConditionExpression="(attribute_exists(timelock)) "
+            "ConditionExpression": "(attribute_exists(timelock)) "
             "and (timelock = :mytimelock)",
             # timelock value
-            ExpressionAttributeValues={":mytimelock": {"N": str(timestamp)}},
+            "ExpressionAttributeValues": {":mytimelock": {"N": str(timestamp)}},
+        }
+
+    def delete_node(self, node: faaskeeper.node.Node, timestamp: int):
+
+        # https://github.com/python/mypy/issues/6799
+        ret = self._state_storage._dynamodb.delete_item(  # type: ignore
+            **self.generate_delete_node(node, timestamp),
             ReturnConsumedCapacity="TOTAL",
         )
         StorageStatistics.instance().add_write_units(

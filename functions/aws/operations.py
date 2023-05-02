@@ -126,16 +126,25 @@ class CreateNodeExecutor(Executor):
         self._node.created = Version(self._counter, None)
         self._node.modified = Version(self._counter, None)
 
-        # FIXME: make both operations concurrently
-        # unlock parent
-        system_storage.commit_node(
-            self._parent_node, self._parent_timestamp, set([NodeDataType.CHILDREN])
-        )
-        # commit node
-        system_storage.commit_node(
-            self._node,
-            self._timestamp,
-            set([NodeDataType.CREATED, NodeDataType.MODIFIED, NodeDataType.CHILDREN]),
+        system_storage.commit_nodes(
+            [
+                system_storage.generate_commit_node(
+                    self._node,
+                    self._timestamp,
+                    set(
+                        [
+                            NodeDataType.CREATED,
+                            NodeDataType.MODIFIED,
+                            NodeDataType.CHILDREN,
+                        ]
+                    ),
+                ),
+                system_storage.generate_commit_node(
+                    self._parent_node,
+                    self._parent_timestamp,
+                    set([NodeDataType.CHILDREN]),
+                ),
+            ],
         )
 
         return (True, {})
@@ -334,12 +343,16 @@ class DeleteNodeExecutor(Executor):
         assert self._parent_node
         assert self._parent_timestamp
 
-        # commit system storage
-        # FIXME: as a transaction
-        system_storage.commit_node(
-            self._parent_node, self._parent_timestamp, set([NodeDataType.CHILDREN])
+        system_storage.commit_nodes(
+            [
+                system_storage.generate_commit_node(
+                    self._parent_node,
+                    self._parent_timestamp,
+                    set([NodeDataType.CHILDREN]),
+                )
+            ],
+            [system_storage.generate_delete_node(self._node, self._timestamp)],
         )
-        system_storage.delete_node(self._node, self._timestamp)
 
         return (True, {})
 
