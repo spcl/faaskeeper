@@ -435,6 +435,7 @@ class DynamoStorage(Storage):
             # path to the node
             Key={"path": {"S": node.path}},
             ReturnConsumedCapacity="TOTAL",
+            ConsistentRead=True,
         )
         StorageStatistics.instance().add_read_units(
             ret["ConsumedCapacity"]["CapacityUnits"]
