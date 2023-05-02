@@ -26,12 +26,22 @@ class Node:
         self._pending_updates: List[str] = []
 
     @property
-    def lock(self) -> Optional["Node.Lock"]:
+    def lock(self) -> "Node.Lock":
+        assert self._lock
         return self._lock
 
     @lock.setter
     def lock(self, timestamp: str):
         self._lock = Node.Lock(timestamp)
+
+    @property
+    def pending_updates(self) -> List[str]:
+        assert self._pending_updates
+        return self._pending_updates
+
+    @pending_updates.setter
+    def pending_updates(self, updates: List[str]):
+        self._pending_updates = updates
 
     @property
     def status(self) -> "Status":
@@ -116,6 +126,10 @@ class Storage(ABC):
 
     @abstractmethod
     def read_node(self, node: faaskeeper.node.Node) -> Node:
+        pass
+
+    @abstractmethod
+    def pop_pending_update(self, node: faaskeeper.node.Node) -> None:
         pass
 
 
@@ -361,6 +375,25 @@ class DynamoStorage(Storage):
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return None
 
+    def pop_pending_update(self, node: faaskeeper.node.Node) -> None:
+
+        try:
+            ret = self._state_storage._dynamodb.update_item(
+                TableName=self._state_storage.storage_name,
+                # path to the node
+                Key={"path": {"S": node.path}},
+                # add '1' to counter at given position
+                UpdateExpression="REMOVE #D[0]",
+                ExpressionAttributeNames={"#D": "pendingUpdates"},
+                ReturnConsumedCapacity="TOTAL",
+            )
+
+            StorageStatistics.instance().add_write_units(
+                ret["ConsumedCapacity"]["CapacityUnits"]
+            )
+        except self._state_storage.errorSupplier.ConditionalCheckFailedException:
+            return None
+
     def generate_delete_node(
         self,
         node: faaskeeper.node.Node,
@@ -415,7 +448,7 @@ class DynamoStorage(Storage):
         dynamo_node: Node
         if "timelock" in data:
             dynamo_node = Node(node, Node.Status.LOCKED)
-            # FIXE: lock details
+            dynamo_node.lock = self._type_deserializer.deserialize(data["timelock"])
         else:
             dynamo_node = Node(node, Node.Status.EXISTS)
 
@@ -431,8 +464,15 @@ class DynamoStorage(Storage):
         if "mFxidSys" in data:
             modified = SystemCounter.from_provider_schema(data["mFxidSys"])  # type: ignore
             dynamo_node.node.modified = Version(modified, None)
+
+        if "children" in data:
             dynamo_node.node.children = self._type_deserializer.deserialize(
                 data["children"]
+            )
+
+        if "pendingUpdates" in data:
+            dynamo_node.pending_updates = self._type_deserializer.deserialize(
+                data["pendingUpdates"]
             )
 
         return dynamo_node

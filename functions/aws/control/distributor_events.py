@@ -1,4 +1,5 @@
 import base64
+import logging
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from typing import Optional, Set
@@ -145,17 +146,31 @@ class DistributorCreateNode(DistributorEvent):
                 "reason": f"node {self.node.path} does not exist in system storage",
             }
 
-        if system_node.Status == SystemNode.Status.LOCKED:
-            raise NotImplementedError()
+        # The node is no longer locked, but the update is not there
+        if system_node.pending_updates[0] != self.event_id:
 
-        # FIXME: check the list of pending updates
+            if (
+                system_node.Status == SystemNode.Status.LOCKED
+                and system_node.lock.timestamp == self.lock_timestamp
+            ):
+                # FIXME: write again, removing lock
+                logging.error("Failing to apply the update - node still locked")
+                raise NotImplementedError()
+            else:
+                return {
+                    "status": "failure",
+                    "path": self.node.path,
+                    "reason": "update_not_committed",
+                }
 
-        # FIXME: Update
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.write(self.node)
         # FIXME: update parent epoch and pxid
         # self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
+
+        system_storage.pop_pending_update(system_node.node)
+
         return {
             "status": "success",
             "path": self.node.path,
@@ -236,8 +251,22 @@ class DistributorSetData(DistributorEvent):
                 "reason": f"node {self.node.path} does not exist in system storage",
             }
 
-        if system_node.Status == SystemNode.Status.LOCKED:
-            raise NotImplementedError()
+        # The node is no longer locked, but the update is not there
+        if system_node.pending_updates[0] != self.event_id:
+
+            if (
+                system_node.Status == SystemNode.Status.LOCKED
+                and system_node.lock.timestamp == self.lock_timestamp
+            ):
+                # FIXME: write again, removing lock
+                logging.error("Failing to apply the update - node still locked")
+                raise NotImplementedError()
+            else:
+                return {
+                    "status": "failure",
+                    "path": self.node.path,
+                    "reason": "update_not_committed",
+                }
 
         """
         On DynamoDB we skip updating the created version as it doesn't change.
@@ -245,6 +274,8 @@ class DistributorSetData(DistributorEvent):
         """
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.node, set([NodeDataType.MODIFIED, NodeDataType.DATA]))
+
+        system_storage.pop_pending_update(system_node.node)
 
         return {
             "status": "success",
@@ -317,12 +348,17 @@ class DistributorDeleteNode(DistributorEvent):
         epoch_counters: Set[str],
     ) -> Optional[dict]:
 
+        system_node = system_storage.read_node(self.node)
+
         # FIXME: update
         # FIXME: retain the node to keep counters
         # self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.delete(self.node)
         # self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
+
+        system_storage.pop_pending_update(system_node.node)
+
         return {
             "status": "success",
             "path": self.node.path,
