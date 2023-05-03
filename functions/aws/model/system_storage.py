@@ -353,7 +353,6 @@ class DynamoStorage(Storage):
                     )
         except self._state_storage.errorSupplier.TransactionCanceledException as e:
             success = False
-            print(e.response)
             if return_old_on_failure is not None:
                 for idx, old_value in enumerate(e.response["CancellationReasons"]):
                     old_values.append(
