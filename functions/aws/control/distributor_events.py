@@ -21,6 +21,12 @@ class DistributorEventType(IntEnum):
     DELETE_NODE = 2
 
 
+class TriBool(IntEnum):
+    CORRECT = 0
+    LOCKED = 1
+    INCORRECT = 2
+
+
 class DistributorEvent(ABC):
     def __init__(self, event_id: str, session_id: str, lock_timestamp: int):
         self._session_id = session_id
@@ -151,6 +157,23 @@ class DistributorCreateNode(DistributorEvent):
             parent_node,
         )
 
+    def _node_status(self, system_node: SystemNode) -> TriBool:
+
+        if system_node.Status == SystemNode.Status.NOT_EXISTS:
+            return TriBool.INCORRECT
+
+        # The node is no longer locked, but the update is not there
+        if (
+            len(system_node.pending_updates) == 0
+            or system_node.pending_updates[0] != self.event_id
+        ):
+            if system_node.locked and system_node.lock.timestamp == self.lock_timestamp:
+                return TriBool.LOCKED
+            else:
+                return TriBool.INCORRECT
+        else:
+            return TriBool.CORRECT
+
     def execute(
         self,
         system_storage: SystemStorage,
@@ -160,59 +183,51 @@ class DistributorCreateNode(DistributorEvent):
 
         system_node = system_storage.read_node(self.node)
 
-        if system_node.Status == SystemNode.Status.NOT_EXISTS:
+        status = self._node_status(system_node)
+
+        if status == TriBool.INCORRECT:
+            logging.error("Failing to apply the update - node updated by someone else")
             return {
                 "status": "failure",
                 "path": self.node.path,
-                "reason": f"node {self.node.path} does not exist in system storage",
+                "reason": "update_not_committed",
             }
 
-        # The node is no longer locked, but the update is not there
-        if (
-            len(system_node.pending_updates) == 0
-            or system_node.pending_updates[0] != self.event_id
-        ):
+        elif status == TriBool.LOCKED:
+            logging.error("Failing to apply the update - node still locked")
 
-            if system_node.locked and system_node.lock.timestamp == self.lock_timestamp:
-                # Now we try to commit the node, but only if we still own a lock.
-                # This is equivalent to a CAS.
+            transaction_status, old_nodes = system_storage.commit_nodes(
+                [
+                    system_storage.generate_commit_node(
+                        self._node,
+                        self.lock_timestamp,
+                        set(
+                            [
+                                NodeDataType.CREATED,
+                                NodeDataType.MODIFIED,
+                                NodeDataType.CHILDREN,
+                            ]
+                        ),
+                        self.event_id,
+                    ),
+                    system_storage.generate_commit_node(
+                        self._parent_node,
+                        self._parent_lock_timestamp,
+                        set([NodeDataType.CHILDREN]),
+                    ),
+                ],
+                return_old_on_failure=[self._node, self._parent_node],
+            )
+            # Transaction failed, let's verify that
+            if not transaction_status:
 
-                status = system_storage.commit_nodes(
-                    [
-                        system_storage.generate_commit_node(
-                            self._node,
-                            self.lock_timestamp,
-                            set(
-                                [
-                                    NodeDataType.CREATED,
-                                    NodeDataType.MODIFIED,
-                                    NodeDataType.CHILDREN,
-                                ]
-                            ),
-                            self.event_id,
-                        ),
-                        system_storage.generate_commit_node(
-                            self._parent_node,
-                            self._parent_lock_timestamp,
-                            set([NodeDataType.CHILDREN]),
-                        ),
-                    ],
-                )
-                if not status:
-                    # FIXME: read here the return - did the original owner manage to commit?
+                if self._node_status(old_nodes[0]) != TriBool.INCORRECT:
                     logging.error("Failing to apply the update - couldn't commit")
                     return {
                         "status": "failure",
                         "path": self.node.path,
                         "reason": "update_not_committed",
                     }
-            else:
-                logging.error("Failing to apply the update - node still locked")
-                return {
-                    "status": "failure",
-                    "path": self.node.path,
-                    "reason": "update_not_committed",
-                }
 
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.write(self.node)
