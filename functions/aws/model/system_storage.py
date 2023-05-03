@@ -121,7 +121,12 @@ class Storage(ABC):
         pass
 
     @abstractmethod
-    def commit_nodes(self, updates: List[dict], deletions: List[dict] = []) -> bool:
+    def commit_nodes(
+        self,
+        updates: List[dict],
+        deletions: List[dict] = [],
+        return_old_on_failure: Optional[List[faaskeeper.node.Node]] = None,
+    ) -> Tuple[bool, List[Node]]:
         pass
 
     @abstractmethod
@@ -311,22 +316,33 @@ class DynamoStorage(Storage):
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return False
 
-    def commit_nodes(self, updates: List[dict], deletions: List[dict] = []) -> bool:
+    def commit_nodes(
+        self,
+        updates: List[dict],
+        deletions: List[dict] = [],
+        return_old_on_failure: Optional[List[faaskeeper.node.Node]] = None,
+    ) -> Tuple[bool, List[Node]]:
 
+        success: bool
+        old_values: List[Node] = []
         try:
             transaction_items = []
 
             for update in updates:
+                if return_old_on_failure is not None:
+                    update["ReturnValuesOnConditionCheckFailure"] = "ALL_OLD"
                 transaction_items.append({"Update": update})
 
             for deletion in deletions:
+                if return_old_on_failure is not None:
+                    deletion["ReturnValuesOnConditionCheckFailure"] = "ALL_OLD"
                 transaction_items.append({"Delete": deletion})
 
             ret = self._state_storage._dynamodb.transact_write_items(
                 TransactItems=transaction_items, ReturnConsumedCapacity="TOTAL"  # type: ignore
             )
-            print("Commit", ret)
 
+            success = True
             for table in ret["ConsumedCapacity"]:
                 StorageStatistics.instance().add_write_units(
                     table["WriteCapacityUnits"]
@@ -335,9 +351,16 @@ class DynamoStorage(Storage):
                     StorageStatistics.instance().add_read_units(
                         table["ReadCapacityUnits"]  # type: ignore
                     )
-            return True
-        except self._state_storage.errorSupplier.ConditionalCheckFailedException:
-            return False
+        except self._state_storage.errorSupplier.TransactionCanceledException as e:
+            success = False
+            print(e.response)
+            if return_old_on_failure is not None:
+                for idx, old_value in enumerate(e.response["CancellationReasons"]):
+                    old_values.append(
+                        self._parse_node(return_old_on_failure[idx], old_value, False)
+                    )
+
+        return (success, old_values)
 
     def increase_system_counter(self, writer_id: int) -> Optional[SystemCounter]:
 
@@ -435,23 +458,14 @@ class DynamoStorage(Storage):
             ret["ConsumedCapacity"]["CapacityUnits"]
         )
 
-    def read_node(self, node: faaskeeper.node.Node) -> Node:
+    def _parse_node(
+        self, node: faaskeeper.node.Node, response: dict, complete_data=True
+    ) -> Node:
 
-        ret = self._state_storage._dynamodb.get_item(
-            TableName=self._state_storage.storage_name,
-            # path to the node
-            Key={"path": {"S": node.path}},
-            ReturnConsumedCapacity="TOTAL",
-            ConsistentRead=True,
-        )
-        StorageStatistics.instance().add_read_units(
-            ret["ConsumedCapacity"]["CapacityUnits"]
-        )
-
-        if "Item" not in ret:
+        if "Item" not in response:
             return Node(node, Node.Status.NOT_EXISTS)
 
-        data = ret["Item"]
+        data = response["Item"]
         dynamo_node: Node
         if "cFxidSys" not in data:
             dynamo_node = Node(node, Node.Status.NOT_EXISTS)
@@ -468,7 +482,7 @@ class DynamoStorage(Storage):
         else:
             dynamo_node.pending_updates = []
 
-        if dynamo_node.status == Node.Status.NOT_EXISTS:
+        if dynamo_node.status == Node.Status.NOT_EXISTS or not complete_data:
             return dynamo_node
 
         if "cFxidSys" in data:
@@ -489,3 +503,17 @@ class DynamoStorage(Storage):
             )
 
         return dynamo_node
+
+    def read_node(self, node: faaskeeper.node.Node) -> Node:
+
+        ret = self._state_storage._dynamodb.get_item(
+            TableName=self._state_storage.storage_name,
+            # path to the node
+            Key={"path": {"S": node.path}},
+            ReturnConsumedCapacity="TOTAL",
+            ConsistentRead=True,
+        )
+        StorageStatistics.instance().add_read_units(
+            ret["ConsumedCapacity"]["CapacityUnits"]
+        )
+        return self._parse_node(node, ret)  # type: ignore
