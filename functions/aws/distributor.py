@@ -1,4 +1,3 @@
-import hashlib
 import json
 import logging
 import time
@@ -8,17 +7,13 @@ from typing import Dict, List, Set
 import boto3
 
 from faaskeeper.stats import StorageStatistics
-from faaskeeper.watch import WatchEventType, WatchType
+from faaskeeper.version import SystemCounter
+from faaskeeper.watch import WatchType
 from functions.aws.config import Config
 from functions.aws.control.channel import Client
-from functions.aws.control.distributor_events import (
-    DistributorCreateNode,
-    DistributorDeleteNode,
-    DistributorEvent,
-    DistributorEventType,
-    DistributorSetData,
-)
+from functions.aws.control.distributor_events import DistributorEventType, builder
 from functions.aws.model.watches import Watches
+from functions.aws.stats import TimingStatistics
 
 mandatory_event_fields = [
     "op" "path",
@@ -56,13 +51,6 @@ for r in regions:
     epoch_counters[r] = set()
 executor = ThreadPoolExecutor(max_workers=2 * len(regions))
 
-repetitions = 0
-sum_total = 0.0
-sum_notify = 0.0
-sum_write = 0.0
-sum_watch = 0.0
-sum_watch_wait = 0.0
-
 
 def get_object(obj: dict):
     return next(iter(obj.values()))
@@ -85,6 +73,8 @@ def launch_watcher(region: str, json_in: dict):
 # def query_watch_id(region: str, node_path: str):
 #    return region_watches[region].get_watch_counters(node_path)
 
+timing_stats = TimingStatistics.instance()
+
 
 def handler(event: dict, context):
 
@@ -97,6 +87,8 @@ def handler(event: dict, context):
         begin = time.time()
         watches_submitters: List[Future] = []
         for record in events:
+
+            counter: SystemCounter
             if "dynamodb" in record and record["eventName"] == "INSERT":
                 write_event = record["dynamodb"]["NewImage"]
                 event_type = DistributorEventType(int(write_event["type"]["N"]))
@@ -120,33 +112,35 @@ def handler(event: dict, context):
                     write_event["data"] = {
                         "B": record["messageAttributes"]["data"]["binaryValue"]
                     }
-            else:
-                raise NotImplementedError()
-
-            client = Client.deserialize(write_event)
-
-            # FIXME: hide under abstraction, boto3 deserialize
-            operation: DistributorEvent
-            counters = []
-            if event_type == DistributorEventType.CREATE_NODE:
-                operation = DistributorCreateNode.deserialize(write_event)
-            elif event_type == DistributorEventType.SET_DATA:
-                operation = DistributorSetData.deserialize(write_event)
-                hashed_path = hashlib.md5(operation.node.path.encode()).hexdigest()
-                counters.append(
-                    f"{hashed_path}_{WatchEventType.NODE_DATA_CHANGED.value}"
-                    f"_{operation.node.modified.system.sum}"
+                counter = SystemCounter.from_raw_data(
+                    [int(record["attributes"]["SequenceNumber"])]
                 )
-            elif event_type == DistributorEventType.DELETE_NODE:
-                operation = DistributorDeleteNode.deserialize(write_event)
             else:
                 raise NotImplementedError()
+
+            """
+                (1) Parse the incoming event.
+                (2) Extend the epoch counter.
+                (3) Apply the update.
+                (4) Distribute the watch notifications, if needed.
+                (5) Notify client.
+            """
+
             try:
+
+                client = Client.deserialize(write_event)
+
+                operation = builder(counter, event_type, write_event)
+
                 begin_write = time.time()
                 # write new data
                 for r in regions:
-                    ret = operation.execute(config.user_storage, epoch_counters[r])
+                    ret = operation.execute(
+                        config.system_storage, config.user_storage, epoch_counters[r]
+                    )
                 end_write = time.time()
+                timing_stats.add_result("write", end_write - begin_write)
+
                 begin_watch = time.time()
                 # start watch delivery
                 for r in regions:
@@ -163,8 +157,10 @@ def handler(event: dict, context):
                     )
 
                 end_watch = time.time()
+                timing_stats.add_result("watch", end_watch - begin_watch)
+
                 for r in regions:
-                    epoch_counters[r].update(counters)
+                    epoch_counters[r].update(operation.epoch_counters())
                 begin_notify = time.time()
                 if ret:
                     # notify client about success
@@ -176,9 +172,11 @@ def handler(event: dict, context):
                 else:
                     config.client_channel.notify(
                         client,
-                        {"status": "failure", "reason": "distributor failured"},
+                        {"status": "failure", "reason": "distributor failure"},
                     )
                 end_notify = time.time()
+                timing_stats.add_result("notify", end_notify - begin_notify)
+
             except Exception:
                 print("Failure!")
                 import traceback
@@ -186,32 +184,19 @@ def handler(event: dict, context):
                 traceback.print_exc()
                 config.client_channel.notify(
                     client,
-                    {"status": "failure", "reason": "distributor failured"},
+                    {"status": "failure", "reason": "distributor failure"},
                 )
         begin_watch_wait = time.time()
         for f in watches_submitters:
             f.result()
         end_watch_wait = time.time()
+        timing_stats.add_result("watch_notify", end_watch_wait - begin_watch_wait)
         end = time.time()
+        timing_stats.add_result("total", end - begin)
+        timing_stats.add_repetition()
 
-        global repetitions
-        global sum_total
-        global sum_notify
-        global sum_write
-        global sum_watch
-        global sum_watch_wait
-        repetitions += 1
-        sum_total += end - begin
-        sum_notify += end_notify - begin_notify
-        sum_write += end_write - begin_write
-        sum_watch += end_watch - begin_watch
-        sum_watch_wait += end_watch_wait - begin_watch_wait
-        if repetitions % 100 == 0:
-            print("RESULT_TOTAL", sum_total)
-            print("RESULT_NOTIFY", sum_notify)
-            print("RESULT_WRITE", sum_write)
-            print("RESULT_WATCH_WAIT", sum_watch)
-            print("RESULT_WATCH_WAIT", sum_watch_wait)
+        if timing_stats.repetitions % 100 == 0:
+            timing_stats.print()
 
     except Exception:
         print("Failure!")

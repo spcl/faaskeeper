@@ -111,6 +111,9 @@ functions:
               - dataTable
               - Arn
           - Fn::GetAtt:
+              - stateTable
+              - Arn
+          - Fn::GetAtt:
               - distributeTable
               - Arn
       - Effect: Allow

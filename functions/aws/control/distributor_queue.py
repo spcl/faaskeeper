@@ -19,6 +19,10 @@ class DistributorQueue(ABC):
     ) -> None:
         pass
 
+    @abstractmethod
+    def push_and_count(self, event: DistributorEvent, client: Client) -> SystemCounter:
+        pass
+
 
 class DistributorQueueDynamo(DistributorQueue):
     def __init__(self, deployment_name: str):
@@ -55,6 +59,11 @@ class DistributorQueueDynamo(DistributorQueue):
             },
         )
 
+    def push_and_count(self, event: DistributorEvent, client: Client) -> SystemCounter:
+        raise NotImplementedError(
+            "Counting events is not supported in the DistributorQueueDynamo!"
+        )
+
 
 class DistributorQueueSQS(DistributorQueue):
     def __init__(self, name: str, region: str):
@@ -86,3 +95,25 @@ class DistributorQueueSQS(DistributorQueue):
             MessageGroupId="0",
             MessageDeduplicationId=str(counter.sum),
         )
+
+    def push_and_count(self, event: DistributorEvent, client: Client) -> SystemCounter:
+
+        client_serialization = {
+            x: self._type_serializer.serialize(y) for x, y in client.serialize().items()
+        }
+        payload: Dict[str, str] = {
+            **client_serialization,  # type: ignore
+            **event.serialize(self._type_serializer),
+        }
+
+        attributes: dict = {}
+        response = self._sqs_client.send_message(
+            QueueUrl=self._sqs_queue_url,
+            MessageBody=json.dumps(payload),
+            MessageAttributes=attributes,
+            MessageGroupId="0",
+            MessageDeduplicationId=event.event_id,
+        )
+        # We use SQS sequence number as the counter
+        new_ctr = int(response["SequenceNumber"])
+        return SystemCounter.from_raw_data([new_ctr])

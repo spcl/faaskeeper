@@ -5,6 +5,8 @@ from typing import Optional
 
 import functions.aws.control as control
 import functions.aws.model as model
+from functions.aws.control import distributor_queue
+from functions.aws.control.distributor_queue import DistributorQueue
 
 
 class Storage(Enum):
@@ -65,18 +67,18 @@ class Config:
             raise RuntimeError("Not implemented!")
 
         # configure distributor queue
-        self._distributor_queue: Optional[control.DistributorQueue]
+        self._distributor_queue: Optional[distributor_queue.DistributorQueue]
         if with_distributor_queue:
             self._distributor_queue_type = {
                 "dynamodb": QueueType.DYNAMODB,
                 "sqs": QueueType.SQS,
             }.get(environ["DISTRIBUTOR_QUEUE"])
             if self._distributor_queue_type == QueueType.DYNAMODB:
-                self._distributor_queue = control.DistributorQueueDynamo(
+                self._distributor_queue = distributor_queue.DistributorQueueDynamo(
                     f"{self._deployment_name}"
                 )
             elif self._distributor_queue_type == QueueType.SQS:
-                self._distributor_queue = control.DistributorQueueSQS(
+                self._distributor_queue = distributor_queue.DistributorQueueSQS(
                     environ["QUEUE_PREFIX"], self.deployment_region
                 )
             else:
@@ -125,7 +127,7 @@ class Config:
         return self._system_storage
 
     @property
-    def distributor_queue(self) -> Optional[control.DistributorQueue]:
+    def distributor_queue(self) -> Optional[DistributorQueue]:
         return self._distributor_queue
 
     @property

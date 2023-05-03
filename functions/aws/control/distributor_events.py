@@ -1,14 +1,18 @@
 import base64
+import hashlib
+import logging
 from abc import ABC, abstractmethod
 from enum import IntEnum
-from typing import Optional, Set
+from typing import Dict, List, Optional, Set, Type
 
 from boto3.dynamodb.types import TypeDeserializer
 
 from faaskeeper.node import Node, NodeDataType
 from faaskeeper.version import EpochCounter, SystemCounter, Version
-
-from ..model.user_storage import Storage as UserStorage
+from faaskeeper.watch import WatchEventType
+from functions.aws.model import SystemStorage
+from functions.aws.model.system_storage import Node as SystemNode
+from functions.aws.model.user_storage import Storage as UserStorage
 
 
 class DistributorEventType(IntEnum):
@@ -17,13 +21,29 @@ class DistributorEventType(IntEnum):
     DELETE_NODE = 2
 
 
+class TriBool(IntEnum):
+    CORRECT = 0
+    LOCKED = 1
+    INCORRECT = 2
+
+
 class DistributorEvent(ABC):
-    def __init__(self, session_id: str):
+    def __init__(self, event_id: str, session_id: str, lock_timestamp: int):
         self._session_id = session_id
+        self._event_id = event_id
+        self._lock_timestamp = lock_timestamp
 
     @property
     def session_id(self) -> str:
         return self._session_id
+
+    @property
+    def event_id(self) -> str:
+        return self._event_id
+
+    @property
+    def lock_timestamp(self) -> int:
+        return self._lock_timestamp
 
     @abstractmethod
     def serialize(self, serializer, base64_encoded=True) -> dict:
@@ -46,8 +66,19 @@ class DistributorEvent(ABC):
 
     @abstractmethod
     def execute(
-        self, user_storage: UserStorage, epoch_counters: Set[str]
+        self,
+        system_storage: SystemStorage,
+        user_storage: UserStorage,
+        epoch_counters: Set[str],
     ) -> Optional[dict]:
+        pass
+
+    @abstractmethod
+    def epoch_counters(self) -> List[str]:
+        pass
+
+    @abstractmethod
+    def set_system_counter(self, system_counter: SystemCounter):
         pass
 
 
@@ -55,10 +86,19 @@ class DistributorCreateNode(DistributorEvent):
 
     _type_deserializer = TypeDeserializer()
 
-    def __init__(self, session_id: str, node: Node, parent_node: Node):
-        super().__init__(session_id)
+    def __init__(
+        self,
+        event_id: str,
+        session_id: str,
+        lock_timestamp: int,
+        parent_lock_timestamp: int,
+        node: Node,
+        parent_node: Node,
+    ):
+        super().__init__(event_id, session_id, lock_timestamp)
         self._node = node
         self._parent_node = parent_node
+        self._parent_lock_timestamp = parent_lock_timestamp
 
     def serialize(self, serializer, base64_encoded=True) -> dict:
         """We must use JSON.
@@ -70,8 +110,10 @@ class DistributorCreateNode(DistributorEvent):
         data = {
             "type": serializer.serialize(self.type.value),
             "session_id": serializer.serialize(self.session_id),
+            "event_id": serializer.serialize(self.event_id),
+            "lock_timestamp": serializer.serialize(self.lock_timestamp),
+            "parent_lock_timestamp": serializer.serialize(self._parent_lock_timestamp),
             "path": serializer.serialize(self.node.path),
-            "counter": self.node.created.system.version,
             "parent_path": serializer.serialize(self.parent.path),
             "parent_children": serializer.serialize(self.parent.children),
         }
@@ -88,9 +130,9 @@ class DistributorCreateNode(DistributorEvent):
 
         deserializer = DistributorCreateNode._type_deserializer
         node = Node(deserializer.deserialize(event_data["path"]))
-        counter = SystemCounter.from_provider_schema(event_data["counter"])
-        node.created = Version(counter, None)
-        node.modified = Version(counter, None)
+        # counter = SystemCounter.from_provider_schema(event_data["counter"])
+        # node.created = Version(counter, None)
+        # node.modified = Version(counter, None)
         node.children = []
         # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
         # node.data = base64.b64decode(event_data["data"]["B"])
@@ -100,23 +142,113 @@ class DistributorCreateNode(DistributorEvent):
         parent_node.children = deserializer.deserialize(event_data["parent_children"])
 
         session_id = deserializer.deserialize(event_data["session_id"])
+        event_id = deserializer.deserialize(event_data["event_id"])
+        lock_timestamp = deserializer.deserialize(event_data["lock_timestamp"])
+        parent_lock_timestamp = deserializer.deserialize(
+            event_data["parent_lock_timestamp"]
+        )
 
-        return DistributorCreateNode(session_id, node, parent_node)
+        return DistributorCreateNode(
+            event_id,
+            session_id,
+            lock_timestamp,
+            parent_lock_timestamp,
+            node,
+            parent_node,
+        )
+
+    def _node_status(self, system_node: SystemNode) -> TriBool:
+
+        # The node is no longer locked, but the update is not there
+        if (
+            len(system_node.pending_updates) == 0
+            or system_node.pending_updates[0] != self.event_id
+        ):
+            if system_node.locked and system_node.lock.timestamp == self.lock_timestamp:
+                return TriBool.LOCKED
+            else:
+                return TriBool.INCORRECT
+        else:
+            return TriBool.CORRECT
 
     def execute(
-        self, user_storage: UserStorage, epoch_counters: Set[str]
+        self,
+        system_storage: SystemStorage,
+        user_storage: UserStorage,
+        epoch_counters: Set[str],
     ) -> Optional[dict]:
-        # FIXME: Update
+
+        system_node = system_storage.read_node(self.node)
+
+        status = self._node_status(system_node)
+
+        if status == TriBool.INCORRECT:
+            logging.error("Failing to apply the update - node updated by someone else")
+            return {
+                "status": "failure",
+                "path": self.node.path,
+                "reason": "update_not_committed",
+            }
+
+        elif status == TriBool.LOCKED:
+            logging.error("Failing to apply the update - node still locked")
+
+            transaction_status, old_nodes = system_storage.commit_nodes(
+                [
+                    system_storage.generate_commit_node(
+                        self._node,
+                        self.lock_timestamp,
+                        set(
+                            [
+                                NodeDataType.CREATED,
+                                NodeDataType.MODIFIED,
+                                NodeDataType.CHILDREN,
+                            ]
+                        ),
+                        self.event_id,
+                    ),
+                    system_storage.generate_commit_node(
+                        self._parent_node,
+                        self._parent_lock_timestamp,
+                        set([NodeDataType.CHILDREN]),
+                    ),
+                ],
+                return_old_on_failure=[self._node, self._parent_node],
+            )
+            # Transaction failed, let's verify that
+            if not transaction_status:
+
+                if self._node_status(old_nodes[0]) != TriBool.CORRECT:
+                    logging.error("Failing to apply the update - couldn't commit")
+                    return {
+                        "status": "failure",
+                        "path": self.node.path,
+                        "reason": "update_not_committed",
+                    }
+
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.write(self.node)
         # FIXME: update parent epoch and pxid
         # self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
+
+        system_storage.pop_pending_update(system_node.node)
+
         return {
             "status": "success",
             "path": self.node.path,
             "system_counter": self.node.created.system.serialize(),
         }
+
+    def epoch_counters(self) -> List[str]:
+        # FIXME:
+        return []
+
+    def set_system_counter(self, system_counter: SystemCounter):
+
+        # FIXME: parent counter
+        self.node.created = Version(system_counter, None)
+        self.node.modified = Version(system_counter, None)
 
     @property
     def node(self) -> Node:
@@ -135,8 +267,8 @@ class DistributorSetData(DistributorEvent):
 
     _type_deserializer = TypeDeserializer()
 
-    def __init__(self, session_id: str, node: Node):
-        super().__init__(session_id)
+    def __init__(self, event_id: str, session_id: str, lock_timestamp: int, node: Node):
+        super().__init__(event_id, session_id, lock_timestamp)
         self._node = node
 
     def serialize(self, serializer, base64_encoded=True) -> dict:
@@ -146,6 +278,8 @@ class DistributorSetData(DistributorEvent):
         data = {
             "type": serializer.serialize(self.type.value),
             "session_id": serializer.serialize(self.session_id),
+            "event_id": serializer.serialize(self.event_id),
+            "lock_timestamp": serializer.serialize(self.lock_timestamp),
             "path": serializer.serialize(self.node.path),
             "counter": self.node.modified.system.version,
         }
@@ -169,19 +303,78 @@ class DistributorSetData(DistributorEvent):
         node.data_b64 = event_data["data"]["B"]
 
         session_id = deserializer.deserialize(event_data["session_id"])
+        event_id = deserializer.deserialize(event_data["event_id"])
+        lock_timestamp = deserializer.deserialize(event_data["lock_timestamp"])
 
-        return DistributorSetData(session_id, node)
+        return DistributorSetData(event_id, session_id, lock_timestamp, node)
+
+    def _node_status(self, system_node: SystemNode) -> TriBool:
+
+        # The node is no longer locked, but the update is not there
+        if (
+            len(system_node.pending_updates) == 0
+            or system_node.pending_updates[0] != self.event_id
+        ):
+            if system_node.locked and system_node.lock.timestamp == self.lock_timestamp:
+                return TriBool.LOCKED
+            else:
+                return TriBool.INCORRECT
+        else:
+            return TriBool.CORRECT
 
     def execute(
-        self, user_storage: UserStorage, epoch_counters: Set[str]
+        self,
+        system_storage: SystemStorage,
+        user_storage: UserStorage,
+        epoch_counters: Set[str],
     ) -> Optional[dict]:
-        # FIXME: update
+
+        system_node = system_storage.read_node(self.node)
+
+        status = self._node_status(system_node)
+
+        if status == TriBool.INCORRECT:
+            logging.error("Failing to apply the update - node updated by someone else")
+            return {
+                "status": "failure",
+                "path": self.node.path,
+                "reason": "update_not_committed",
+            }
+        elif status == TriBool.LOCKED:
+
+            logging.error("Failing to apply the update - node still locked")
+
+            commit_status = system_storage.commit_node(
+                self.node,
+                self.lock_timestamp,
+                set([NodeDataType.MODIFIED]),
+                self.event_id,
+            )
+            # Transaction failed, let's verify that
+            if not commit_status:
+
+                # We shouldn't do a second read here.
+                # Unfortunately, DynamoDB update-item returns the attributes only on a succesful
+                # update. When it fails, we need to read manually.
+                system_node = system_storage.read_node(self.node)
+
+                if self._node_status(system_node) != TriBool.CORRECT:
+                    logging.error("Failing to apply the update - couldn't commit")
+                    return {
+                        "status": "failure",
+                        "path": self.node.path,
+                        "reason": "update_not_committed",
+                    }
+
         """
         On DynamoDB we skip updating the created version as it doesn't change.
         On S3, we need to write this every single time.
         """
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.node, set([NodeDataType.MODIFIED, NodeDataType.DATA]))
+
+        system_storage.pop_pending_update(system_node.node)
+
         return {
             "status": "success",
             "path": self.node.path,
@@ -196,15 +389,36 @@ class DistributorSetData(DistributorEvent):
     def type(self) -> DistributorEventType:
         return DistributorEventType.SET_DATA
 
+    def epoch_counters(self) -> List[str]:
+
+        hashed_path = hashlib.md5(self.node.path.encode()).hexdigest()
+        return [
+            f"{hashed_path}_{WatchEventType.NODE_DATA_CHANGED.value}"
+            f"_{self.node.modified.system.sum}"
+        ]
+
+    def set_system_counter(self, system_counter: SystemCounter):
+
+        self.node.modified = Version(system_counter, None)
+
 
 class DistributorDeleteNode(DistributorEvent):
 
     _type_deserializer = TypeDeserializer()
 
-    def __init__(self, session_id: str, node: Node, parent_node: Node):
-        super().__init__(session_id)
+    def __init__(
+        self,
+        event_id: str,
+        session_id: str,
+        lock_timestamp: int,
+        parent_lock_timestamp: int,
+        node: Node,
+        parent_node: Node,
+    ):
+        super().__init__(event_id, session_id, lock_timestamp)
         self._node = node
         self._parent_node = parent_node
+        self._parent_lock_timestamp = parent_lock_timestamp
 
     def serialize(self, serializer, base64_encoded=True) -> dict:
         """We must use JSON.
@@ -213,6 +427,9 @@ class DistributorDeleteNode(DistributorEvent):
         return {
             "type": serializer.serialize(self.type.value),
             "session_id": serializer.serialize(self.session_id),
+            "event_id": serializer.serialize(self.event_id),
+            "lock_timestamp": serializer.serialize(self.lock_timestamp),
+            "parent_lock_timestamp": serializer.serialize(self._parent_lock_timestamp),
             "path": serializer.serialize(self.node.path),
             "parent_path": serializer.serialize(self.parent.path),
             "parent_children": serializer.serialize(self.parent.children),
@@ -230,12 +447,84 @@ class DistributorDeleteNode(DistributorEvent):
         parent_node.children = deserializer.deserialize(event_data["parent_children"])
 
         session_id = deserializer.deserialize(event_data["session_id"])
+        event_id = deserializer.deserialize(event_data["event_id"])
+        lock_timestamp = deserializer.deserialize(event_data["lock_timestamp"])
+        parent_lock_timestamp = deserializer.deserialize(
+            event_data["parent_lock_timestamp"]
+        )
 
-        return DistributorDeleteNode(session_id, node, parent_node)
+        return DistributorDeleteNode(
+            event_id,
+            session_id,
+            lock_timestamp,
+            parent_lock_timestamp,
+            node,
+            parent_node,
+        )
+
+    def _node_status(self, system_node: SystemNode) -> TriBool:
+
+        # The node is no longer locked, but the update is not there
+        if (
+            len(system_node.pending_updates) == 0
+            or system_node.pending_updates[0] != self.event_id
+        ):
+            if system_node.locked and system_node.lock.timestamp == self.lock_timestamp:
+                return TriBool.LOCKED
+            else:
+                return TriBool.INCORRECT
+        else:
+            return TriBool.CORRECT
 
     def execute(
-        self, user_storage: UserStorage, epoch_counters: Set[str]
+        self,
+        system_storage: SystemStorage,
+        user_storage: UserStorage,
+        epoch_counters: Set[str],
     ) -> Optional[dict]:
+
+        system_node = system_storage.read_node(self.node)
+
+        # TODO: in the future, we want to allow reader-writer locks on the parent node.
+        # Then, for deletion, it means that we need to search the loop for the pending update
+        # as we ne longer have the guarantee that our update is the first one.
+        # The node is no longer locked, but the update is not there
+        status = self._node_status(system_node)
+
+        if status == TriBool.INCORRECT:
+            logging.error("Failing to apply the update - node updated by someone else")
+            return {
+                "status": "failure",
+                "path": self.node.path,
+                "reason": "update_not_committed",
+            }
+
+        elif status == TriBool.LOCKED:
+            logging.error("Failing to apply the update - node still locked")
+
+            transaction_status, old_nodes = system_storage.commit_nodes(
+                [
+                    system_storage.generate_commit_node(
+                        self._parent_node,
+                        self._parent_lock_timestamp,
+                        set([NodeDataType.CHILDREN]),
+                    ),
+                    system_storage.generate_delete_node(
+                        self.node, self.lock_timestamp, self.event_id
+                    ),
+                ],
+                return_old_on_failure=[self._parent_node, self._node],
+            )
+            # Transaction failed, let's verify that
+            if not transaction_status:
+
+                if self._node_status(old_nodes[1]) != TriBool.CORRECT:
+                    logging.error("Failing to apply the update - couldn't commit")
+                    return {
+                        "status": "failure",
+                        "path": self.node.path,
+                        "reason": "update_not_committed",
+                    }
 
         # FIXME: update
         # FIXME: retain the node to keep counters
@@ -243,10 +532,21 @@ class DistributorDeleteNode(DistributorEvent):
         user_storage.delete(self.node)
         # self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
+
+        system_storage.pop_pending_update(system_node.node)
+
         return {
             "status": "success",
             "path": self.node.path,
         }
+
+    def epoch_counters(self) -> List[str]:
+        # FIXME:
+        return []
+
+    def set_system_counter(self, system_counter: SystemCounter):
+        # FIXME: parent counter
+        pass
 
     @property
     def node(self) -> Node:
@@ -259,3 +559,23 @@ class DistributorDeleteNode(DistributorEvent):
     @property
     def type(self) -> DistributorEventType:
         return DistributorEventType.DELETE_NODE
+
+
+def builder(
+    counter: SystemCounter, event_type: DistributorEventType, event: dict
+) -> DistributorEvent:
+
+    ops: Dict[DistributorEventType, Type[DistributorEvent]] = {
+        DistributorEventType.CREATE_NODE: DistributorCreateNode,
+        DistributorEventType.SET_DATA: DistributorSetData,
+        DistributorEventType.DELETE_NODE: DistributorDeleteNode,
+    }
+
+    if event_type not in ops:
+        raise NotImplementedError()
+
+    distr_event = ops[event_type]
+    op = distr_event.deserialize(event)
+    op.set_system_counter(counter)
+
+    return op

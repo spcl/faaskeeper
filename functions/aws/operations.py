@@ -14,7 +14,7 @@ from faaskeeper.operations import (
     RequestOperation,
     SetData,
 )
-from faaskeeper.version import Version
+from faaskeeper.version import SystemCounter, Version
 from functions.aws.control.channel import Client
 from functions.aws.control.distributor_events import (
     DistributorCreateNode,
@@ -27,8 +27,13 @@ from functions.aws.stats import TimingStatistics
 
 
 class Executor(ABC):
-    def __init__(self, op: RequestOperation):
+    def __init__(self, event_id: str, op: RequestOperation):
         self._op = op
+        self._event_id = event_id
+
+    @property
+    def event_id(self) -> str:
+        return self._event_id
 
     @abstractmethod
     def lock_and_read(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
@@ -44,8 +49,9 @@ class Executor(ABC):
 
 
 class CreateNodeExecutor(Executor):
-    def __init__(self, op: CreateNode):
-        super().__init__(op)
+    def __init__(self, event_id: str, op: CreateNode):
+        super().__init__(event_id, op)
+        self._counter: Optional[SystemCounter] = None
 
     @property
     def op(self) -> CreateNode:
@@ -98,59 +104,73 @@ class CreateNodeExecutor(Executor):
                 },
             )
 
-        return (True, {})
-
-    def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
-
-        assert self._parent_node
-        assert self._parent_timestamp
-
-        # FIXME: we shouldn't use writer ID anymore
-        self._counter = system_storage.increase_system_counter(0)
-        if self._counter is None:
-            return (False, {"status": "failure", "reason": "unknown"})
-
         # store the created and the modified version counter
         self._node = Node(self.op.path)
-        self._node.created = Version(self._counter, None)
-        self._node.modified = Version(self._counter, None)
         self._node.children = []
         # we propagate data to another queue, we should use the already
         # base64-encoded data
         # FIXME: keep the information if base64 encoding is actually applied?
         # Important for Redis
         self._node.data_b64 = self.op.data_b64
-
-        # FIXME: make both operations concurrently
-        # unlock parent
         # parent now has one child more
         self._parent_node.children.append(pathlib.Path(self.op.path).name)
-        system_storage.commit_node(
-            self._parent_node, self._parent_timestamp, set([NodeDataType.CHILDREN])
-        )
-        # commit node
-        system_storage.commit_node(
-            self._node,
-            self._timestamp,
-            set([NodeDataType.CREATED, NodeDataType.MODIFIED, NodeDataType.CHILDREN]),
+
+        return (True, {})
+
+    def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
+
+        assert self._counter
+        assert self._parent_node
+        assert self._parent_timestamp
+
+        self._node.created = Version(self._counter, None)
+        self._node.modified = Version(self._counter, None)
+
+        # If we fail, we do not notify the user - it is now the job of the distributor.
+        system_storage.commit_nodes(
+            [
+                system_storage.generate_commit_node(
+                    self._node,
+                    self._timestamp,
+                    set(
+                        [
+                            NodeDataType.CREATED,
+                            NodeDataType.MODIFIED,
+                            NodeDataType.CHILDREN,
+                        ]
+                    ),
+                    self.event_id,
+                ),
+                system_storage.generate_commit_node(
+                    self._parent_node,
+                    self._parent_timestamp,
+                    set([NodeDataType.CHILDREN]),
+                ),
+            ],
         )
 
         return (True, {})
 
     def distributor_push(self, client: Client, distributor_queue: DistributorQueue):
 
-        assert self._counter
         assert self._parent_node
-        distributor_queue.push(
-            self._counter,
-            DistributorCreateNode(client.session_id, self._node, self._parent_node),
+        assert self._parent_timestamp
+        self._counter = distributor_queue.push_and_count(
+            DistributorCreateNode(
+                self.event_id,
+                client.session_id,
+                self._timestamp,
+                self._parent_timestamp,
+                self._node,
+                self._parent_node,
+            ),
             client,
         )
 
 
 class DeregisterSessionExecutor(Executor):
-    def __init__(self, op: DeregisterSession):
-        super().__init__(op)
+    def __init__(self, event_id: str, op: DeregisterSession):
+        super().__init__(event_id, op)
 
     @property
     def op(self) -> DeregisterSession:
@@ -182,10 +202,11 @@ class DeregisterSessionExecutor(Executor):
 
 
 class SetDataExecutor(Executor):
-    def __init__(self, op: SetData):
-        super().__init__(op)
+    def __init__(self, event_id: str, op: SetData):
+        super().__init__(event_id, op)
         self._stats = TimingStatistics.instance()
         self._begin = 0.0
+        self._counter: Optional[SystemCounter] = None
 
     @property
     def op(self) -> SetData:
@@ -217,19 +238,19 @@ class SetDataExecutor(Executor):
                 {"status": "failure", "path": path, "reason": "node_doesnt_exist"},
             )
 
+        self._system_node.data_b64 = self.op.data_b64
+
         return (True, {})
 
     def distributor_push(self, client: Client, distributor_queue: DistributorQueue):
 
-        assert self._counter
         assert self._system_node
 
         begin_push = time.time()
-
-        assert distributor_queue
-        distributor_queue.push(
-            self._counter,
-            DistributorSetData(client.session_id, self._system_node),
+        self._counter = distributor_queue.push_and_count(
+            DistributorSetData(
+                self.event_id, client.session_id, self._timestamp, self._system_node
+            ),
             client,
         )
         end_push = time.time()
@@ -238,22 +259,17 @@ class SetDataExecutor(Executor):
     def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
 
         assert self._system_node
-
-        begin_atomic = time.time()
-        # FIXME: we shouldn't use writer ID anymore
-        self._counter = system_storage.increase_system_counter(0)
-        if self._counter is None:
-            return (False, {"status": "failure", "reason": "unknown"})
-        end_atomic = time.time()
-        self._stats.add_result("atomic", end_atomic - begin_atomic)
+        assert self._counter
 
         begin_commit = time.time()
         # store only the modified version counter
         # the new data will be written by the distributor
         self._system_node.modified = Version(self._counter, None)
-        self._system_node.data_b64 = self.op.data_b64
         if not system_storage.commit_node(
-            self._system_node, self._timestamp, set([NodeDataType.MODIFIED])
+            self._system_node,
+            self._timestamp,
+            set([NodeDataType.MODIFIED]),
+            self.event_id,
         ):
             return (False, {"status": "failure", "reason": "unknown"})
         end_commit = time.time()
@@ -267,8 +283,8 @@ class SetDataExecutor(Executor):
 
 
 class DeleteNodeExecutor(Executor):
-    def __init__(self, op: DeleteNode):
-        super().__init__(op)
+    def __init__(self, event_id: str, op: DeleteNode):
+        super().__init__(event_id, op)
 
     @property
     def op(self) -> DeleteNode:
@@ -315,18 +331,27 @@ class DeleteNodeExecutor(Executor):
                 break
         assert self._parent_node
 
+        # remove child from parent node
+        self._parent_node.children.remove(pathlib.Path(self.op.path).name)
+
         return (True, {})
 
     def distributor_push(self, client: Client, distributor_queue: DistributorQueue):
 
-        assert self._counter
         assert self._node
         assert self._parent_node
+        assert self._parent_timestamp
 
         assert distributor_queue
-        distributor_queue.push(
-            self._counter,
-            DistributorDeleteNode(client.session_id, self._node, self._parent_node),
+        distributor_queue.push_and_count(
+            DistributorDeleteNode(
+                self.event_id,
+                client.session_id,
+                self._timestamp,
+                self._parent_timestamp,
+                self._node,
+                self._parent_node,
+            ),
             client,
         )
 
@@ -337,20 +362,18 @@ class DeleteNodeExecutor(Executor):
         assert self._parent_node
         assert self._parent_timestamp
 
-        # FIXME: we shouldn't use writer ID anymore
-        self._counter = system_storage.increase_system_counter(0)
-        if self._counter is None:
-            return (False, {"status": "failure", "reason": "unknown"})
-
-        # remove child from parent node
-        self._parent_node.children.remove(pathlib.Path(self.op.path).name)
-
-        # commit system storage
-        # FIXME: as a transaction
-        system_storage.commit_node(
-            self._parent_node, self._parent_timestamp, set([NodeDataType.CHILDREN])
+        system_storage.commit_nodes(
+            [
+                system_storage.generate_commit_node(
+                    self._parent_node,
+                    self._parent_timestamp,
+                    set([NodeDataType.CHILDREN]),
+                ),
+                system_storage.generate_delete_node(
+                    self._node, self._timestamp, self.event_id
+                ),
+            ]
         )
-        system_storage.delete_node(self._node, self._timestamp)
 
         return (True, {})
 
@@ -389,4 +412,4 @@ def builder(
         error_msg = {"status": "failure", "reason": "incorrect_request"}
         return (None, error_msg)
 
-    return (executor_type(op), {})
+    return (executor_type(event_id, op), {})
