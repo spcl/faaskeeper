@@ -159,9 +159,6 @@ class DistributorCreateNode(DistributorEvent):
 
     def _node_status(self, system_node: SystemNode) -> TriBool:
 
-        if system_node.Status == SystemNode.Status.NOT_EXISTS:
-            return TriBool.INCORRECT
-
         # The node is no longer locked, but the update is not there
         if (
             len(system_node.pending_updates) == 0
@@ -312,9 +309,6 @@ class DistributorSetData(DistributorEvent):
         return DistributorSetData(event_id, session_id, lock_timestamp, node)
 
     def _node_status(self, system_node: SystemNode) -> TriBool:
-
-        if system_node.Status == SystemNode.Status.NOT_EXISTS:
-            return TriBool.INCORRECT
 
         # The node is no longer locked, but the update is not there
         if (
@@ -468,6 +462,20 @@ class DistributorDeleteNode(DistributorEvent):
             parent_node,
         )
 
+    def _node_status(self, system_node: SystemNode) -> TriBool:
+
+        # The node is no longer locked, but the update is not there
+        if (
+            len(system_node.pending_updates) == 0
+            or system_node.pending_updates[0] != self.event_id
+        ):
+            if system_node.locked and system_node.lock.timestamp == self.lock_timestamp:
+                return TriBool.LOCKED
+            else:
+                return TriBool.INCORRECT
+        else:
+            return TriBool.CORRECT
+
     def execute(
         self,
         system_storage: SystemStorage,
@@ -477,50 +485,46 @@ class DistributorDeleteNode(DistributorEvent):
 
         system_node = system_storage.read_node(self.node)
 
-        if system_node.Status == SystemNode.Status.NOT_EXISTS:
-            return {
-                "status": "failure",
-                "path": self.node.path,
-                "reason": f"node {self.node.path} does not exist in system storage",
-            }
-
         # TODO: in the future, we want to allow reader-writer locks on the parent node.
         # Then, for deletion, it means that we need to search the loop for the pending update
         # as we ne longer have the guarantee that our update is the first one.
         # The node is no longer locked, but the update is not there
-        if (
-            len(system_node.pending_updates) == 0
-            or system_node.pending_updates[0] != self.event_id
-        ):
+        status = self._node_status(system_node)
 
-            if system_node.locked and system_node.lock.timestamp == self.lock_timestamp:
-                status = system_storage.commit_nodes(
-                    [
-                        system_storage.generate_commit_node(
-                            self._parent_node,
-                            self._parent_lock_timestamp,
-                            set([NodeDataType.CHILDREN]),
-                        ),
-                        system_storage.generate_delete_node(
-                            self.node, self.lock_timestamp, self.event_id
-                        ),
-                    ],
-                )
-                if not status:
-                    # FIXME: read here the return - did the original owner manage to commit?
+        if status == TriBool.INCORRECT:
+            logging.error("Failing to apply the update - node updated by someone else")
+            return {
+                "status": "failure",
+                "path": self.node.path,
+                "reason": "update_not_committed",
+            }
+
+        elif status == TriBool.LOCKED:
+            logging.error("Failing to apply the update - node still locked")
+
+            transaction_status, old_nodes = system_storage.commit_nodes(
+                [
+                    system_storage.generate_commit_node(
+                        self._parent_node,
+                        self._parent_lock_timestamp,
+                        set([NodeDataType.CHILDREN]),
+                    ),
+                    system_storage.generate_delete_node(
+                        self.node, self.lock_timestamp, self.event_id
+                    ),
+                ],
+                return_old_on_failure=[self._parent_node, self._node],
+            )
+            # Transaction failed, let's verify that
+            if not transaction_status:
+
+                if self._node_status(old_nodes[1]) != TriBool.CORRECT:
                     logging.error("Failing to apply the update - couldn't commit")
                     return {
                         "status": "failure",
                         "path": self.node.path,
                         "reason": "update_not_committed",
                     }
-            else:
-                logging.error("Failing to apply the update - node still locked")
-                return {
-                    "status": "failure",
-                    "path": self.node.path,
-                    "reason": "update_not_committed",
-                }
 
         # FIXME: update
         # FIXME: retain the node to keep counters
