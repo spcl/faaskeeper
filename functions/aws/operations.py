@@ -126,27 +126,28 @@ class CreateNodeExecutor(Executor):
         self._node.created = Version(self._counter, None)
         self._node.modified = Version(self._counter, None)
 
-        # system_storage.commit_nodes(
-        #    [
-        #        system_storage.generate_commit_node(
-        #            self._node,
-        #            self._timestamp,
-        #            set(
-        #                [
-        #                    NodeDataType.CREATED,
-        #                    NodeDataType.MODIFIED,
-        #                    NodeDataType.CHILDREN,
-        #                ]
-        #            ),
-        #            self.event_id,
-        #        ),
-        #        system_storage.generate_commit_node(
-        #            self._parent_node,
-        #            self._parent_timestamp,
-        #            set([NodeDataType.CHILDREN]),
-        #        ),
-        #    ],
-        # )
+        # If we fail, we do not notify the user - it is now the job of the distributor.
+        system_storage.commit_nodes(
+            [
+                system_storage.generate_commit_node(
+                    self._node,
+                    self._timestamp,
+                    set(
+                        [
+                            NodeDataType.CREATED,
+                            NodeDataType.MODIFIED,
+                            NodeDataType.CHILDREN,
+                        ]
+                    ),
+                    self.event_id,
+                ),
+                system_storage.generate_commit_node(
+                    self._parent_node,
+                    self._parent_timestamp,
+                    set([NodeDataType.CHILDREN]),
+                ),
+            ],
+        )
 
         return (True, {})
 
@@ -367,13 +368,11 @@ class DeleteNodeExecutor(Executor):
                     self._parent_node,
                     self._parent_timestamp,
                     set([NodeDataType.CHILDREN]),
-                )
-            ],
-            [
+                ),
                 system_storage.generate_delete_node(
                     self._node, self._timestamp, self.event_id
-                )
-            ],
+                ),
+            ]
         )
 
         return (True, {})

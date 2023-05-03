@@ -14,9 +14,8 @@ from functions.aws.control.dynamo import DynamoStorage as DynamoDriver
 
 class Node:
     class Status(Enum):
-        EXISTS = (0,)
-        NOT_EXISTS = (1,)
-        LOCKED = 2
+        EXISTS = 0
+        NOT_EXISTS = 1
 
     Lock = namedtuple("Lock", ["timestamp"])
 
@@ -24,15 +23,20 @@ class Node:
         self._node = node
         self._status = status
         self._pending_updates: List[str] = []
+        self._lock: Optional[Node.Lock] = None
 
     @property
     def lock(self) -> "Node.Lock":
-        assert self._lock
+        assert self._lock is not None
         return self._lock
 
     @lock.setter
     def lock(self, timestamp: str):
         self._lock = Node.Lock(timestamp)
+
+    @property
+    def locked(self) -> bool:
+        return self._lock is not None
 
     @property
     def pending_updates(self) -> List[str]:
@@ -385,6 +389,18 @@ class DynamoStorage(Storage):
         update_event_id: Optional[str] = None,
     ) -> dict:
 
+        update_expr = "REMOVE #created, #modified, #children, #timelock"
+        update_values = {":mytimelock": {"N": str(timestamp)}}
+        if update_event_id is not None:
+
+            update_expr = (
+                f"{update_expr} SET pendingUpdates = "
+                "list_append(pendingUpdates, :newUpdate)"
+            )
+            update_values[":newUpdate"] = self._type_serializer.serialize(  # type: ignore
+                [update_event_id]  # type: ignore
+            )
+
         return {
             "TableName": self._state_storage.storage_name,
             # path to the node
@@ -392,8 +408,14 @@ class DynamoStorage(Storage):
             # lock exists and it's ours
             "ConditionExpression": "(attribute_exists(timelock)) "
             "and (timelock = :mytimelock)",
-            # timelock value
-            "ExpressionAttributeValues": {":mytimelock": {"N": str(timestamp)}},
+            "UpdateExpression": update_expr,
+            "ExpressionAttributeNames": {
+                "#created": "cFxidSys",
+                "#modified": "mFxidSys",
+                "#children": "children",
+                "#timelock": "timelock",
+            },
+            "ExpressionAttributeValues": update_values,
         }
 
     def delete_node(
@@ -404,6 +426,7 @@ class DynamoStorage(Storage):
     ):
 
         # https://github.com/python/mypy/issues/6799
+        # We cannot delete the node - we need to keep the list of pending updates.
         ret = self._state_storage._dynamodb.delete_item(  # type: ignore
             **self.generate_delete_node(node, timestamp, update_event_id),
             ReturnConsumedCapacity="TOTAL",
@@ -429,15 +452,25 @@ class DynamoStorage(Storage):
             return Node(node, Node.Status.NOT_EXISTS)
 
         data = ret["Item"]
-        # is it still locked?
         dynamo_node: Node
-        if "timelock" in data:
-            dynamo_node = Node(node, Node.Status.LOCKED)
-            dynamo_node.lock = self._type_deserializer.deserialize(data["timelock"])
+        if "cFxidSys" not in data:
+            dynamo_node = Node(node, Node.Status.NOT_EXISTS)
         else:
             dynamo_node = Node(node, Node.Status.EXISTS)
 
-        # FIXME: parse list updates
+        if "timelock" in data:
+            dynamo_node.lock = self._type_deserializer.deserialize(data["timelock"])
+
+        if "pendingUpdates" in data:
+            dynamo_node.pending_updates = self._type_deserializer.deserialize(
+                data["pendingUpdates"]
+            )
+        else:
+            dynamo_node.pending_updates = []
+
+        if dynamo_node.status == Node.Status.NOT_EXISTS:
+            return dynamo_node
+
         if "cFxidSys" in data:
             created = SystemCounter.from_provider_schema(data["cFxidSys"])  # type: ignore
             dynamo_node.node.created = Version(
@@ -454,12 +487,5 @@ class DynamoStorage(Storage):
             dynamo_node.node.children = self._type_deserializer.deserialize(
                 data["children"]
             )
-
-        if "pendingUpdates" in data:
-            dynamo_node.pending_updates = self._type_deserializer.deserialize(
-                data["pendingUpdates"]
-            )
-        else:
-            dynamo_node.pending_updates = []
 
         return dynamo_node
