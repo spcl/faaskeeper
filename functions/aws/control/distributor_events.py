@@ -167,17 +167,13 @@ class DistributorCreateNode(DistributorEvent):
                 "reason": f"node {self.node.path} does not exist in system storage",
             }
 
-        print(system_node.pending_updates)
         # The node is no longer locked, but the update is not there
         if (
             len(system_node.pending_updates) == 0
             or system_node.pending_updates[0] != self.event_id
         ):
 
-            if (
-                system_node.status == SystemNode.Status.LOCKED
-                and system_node.lock.timestamp == self.lock_timestamp
-            ):
+            if system_node.locked and system_node.lock.timestamp == self.lock_timestamp:
                 # Now we try to commit the node, but only if we still own a lock.
                 # This is equivalent to a CAS.
 
@@ -202,17 +198,16 @@ class DistributorCreateNode(DistributorEvent):
                         ),
                     ],
                 )
-                print("Status", status)
-                if status:
-                    print("Committed the node!")
-                else:
-                    logging.error("Failing to apply the update - node still locked")
+                if not status:
+                    # FIXME: read here the return - did the original owner manage to commit?
+                    logging.error("Failing to apply the update - couldn't commit")
                     return {
                         "status": "failure",
                         "path": self.node.path,
                         "reason": "update_not_committed",
                     }
             else:
+                logging.error("Failing to apply the update - node still locked")
                 return {
                     "status": "failure",
                     "path": self.node.path,
@@ -319,30 +314,27 @@ class DistributorSetData(DistributorEvent):
 
         # The node is no longer locked, but the update is not there
         if (
-            len(system_node.pending_updates) > 0
-            and system_node.pending_updates[0] != self.event_id
+            len(system_node.pending_updates) == 0
+            or system_node.pending_updates[0] != self.event_id
         ):
 
-            if (
-                system_node.Status == SystemNode.Status.LOCKED
-                and system_node.lock.timestamp == self.lock_timestamp
-            ):
+            if system_node.locked and system_node.lock.timestamp == self.lock_timestamp:
                 status = system_storage.commit_node(
                     self.node,
                     self.lock_timestamp,
                     set([NodeDataType.MODIFIED]),
                     self.event_id,
                 )
-                if status:
-                    print("Committed the node!")
-                else:
-                    logging.error("Failing to apply the update - node still locked")
+                if not status:
+                    # FIXME: read here the return - did the original owner manage to commit?
+                    logging.error("Failing to apply the update - couldn't commit")
                     return {
                         "status": "failure",
                         "path": self.node.path,
                         "reason": "update_not_committed",
                     }
             else:
+                logging.error("Failing to apply the update - node still locked")
                 return {
                     "status": "failure",
                     "path": self.node.path,
@@ -461,40 +453,38 @@ class DistributorDeleteNode(DistributorEvent):
                 "reason": f"node {self.node.path} does not exist in system storage",
             }
 
+        # TODO: in the future, we want to allow reader-writer locks on the parent node.
+        # Then, for deletion, it means that we need to search the loop for the pending update
+        # as we ne longer have the guarantee that our update is the first one.
         # The node is no longer locked, but the update is not there
         if (
-            len(system_node.pending_updates) > 0
-            and system_node.pending_updates[0] != self.event_id
+            len(system_node.pending_updates) == 0
+            or system_node.pending_updates[0] != self.event_id
         ):
 
-            if (
-                system_node.Status == SystemNode.Status.LOCKED
-                and system_node.lock.timestamp == self.lock_timestamp
-            ):
+            if system_node.locked and system_node.lock.timestamp == self.lock_timestamp:
                 status = system_storage.commit_nodes(
                     [
                         system_storage.generate_commit_node(
                             self._parent_node,
                             self._parent_lock_timestamp,
                             set([NodeDataType.CHILDREN]),
-                        )
-                    ],
-                    [
+                        ),
                         system_storage.generate_delete_node(
                             self.node, self.lock_timestamp, self.event_id
-                        )
+                        ),
                     ],
                 )
-                if status:
-                    print("Committed the node!")
-                else:
-                    logging.error("Failing to apply the update - node still locked")
+                if not status:
+                    # FIXME: read here the return - did the original owner manage to commit?
+                    logging.error("Failing to apply the update - couldn't commit")
                     return {
                         "status": "failure",
                         "path": self.node.path,
                         "reason": "update_not_committed",
                     }
             else:
+                logging.error("Failing to apply the update - node still locked")
                 return {
                     "status": "failure",
                     "path": self.node.path,
