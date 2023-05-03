@@ -216,7 +216,7 @@ class DistributorCreateNode(DistributorEvent):
                 return_old_on_failure=[self._node, self._parent_node],
             )
             # Transaction failed, let's verify that
-            if not transaction_status:
+            if not transaction_status and len(old_nodes) > 0:
 
                 if self._node_status(old_nodes[0]) != TriBool.CORRECT:
                     logging.error("Failing to apply the update - couldn't commit")
@@ -516,7 +516,8 @@ class DistributorDeleteNode(DistributorEvent):
                 return_old_on_failure=[self._parent_node, self._node],
             )
             # Transaction failed, let's verify that
-            if not transaction_status:
+            # if not transaction_status:
+            if not transaction_status and len(old_nodes) > 0:
 
                 if self._node_status(old_nodes[1]) != TriBool.CORRECT:
                     logging.error("Failing to apply the update - couldn't commit")

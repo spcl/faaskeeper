@@ -1,3 +1,4 @@
+import logging
 from abc import ABC, abstractmethod
 from collections import namedtuple
 from enum import Enum
@@ -358,6 +359,13 @@ class DynamoStorage(Storage):
                     old_values.append(
                         self._parse_node(return_old_on_failure[idx], old_value, False)
                     )
+        except self._state_storage.errorSupplier.TransactionConflictException as e:
+            logging.error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            logging.error(e)
+            logging.error(e.response)
+            success = False
+            # There are no old nodes to be read for the transaction conflict
+            # Someone else managed to update the node while we were rejected.
 
         return (success, old_values)
 
