@@ -167,14 +167,15 @@ class DistributorCreateNode(DistributorEvent):
                 "reason": f"node {self.node.path} does not exist in system storage",
             }
 
+        print(system_node.pending_updates)
         # The node is no longer locked, but the update is not there
         if (
-            len(system_node.pending_updates) > 0
-            and system_node.pending_updates[0] != self.event_id
+            len(system_node.pending_updates) == 0
+            or system_node.pending_updates[0] != self.event_id
         ):
 
             if (
-                system_node.Status == SystemNode.Status.LOCKED
+                system_node.status == SystemNode.Status.LOCKED
                 and system_node.lock.timestamp == self.lock_timestamp
             ):
                 # Now we try to commit the node, but only if we still own a lock.
@@ -201,6 +202,7 @@ class DistributorCreateNode(DistributorEvent):
                         ),
                     ],
                 )
+                print("Status", status)
                 if status:
                     print("Committed the node!")
                 else:

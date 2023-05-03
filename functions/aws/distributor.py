@@ -113,7 +113,7 @@ def handler(event: dict, context):
                         "B": record["messageAttributes"]["data"]["binaryValue"]
                     }
                 counter = SystemCounter.from_raw_data(
-                    record["attributes"]["SequenceNumber"]
+                    [int(record["attributes"]["SequenceNumber"])]
                 )
             else:
                 raise NotImplementedError()

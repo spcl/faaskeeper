@@ -321,6 +321,7 @@ class DynamoStorage(Storage):
             ret = self._state_storage._dynamodb.transact_write_items(
                 TransactItems=transaction_items, ReturnConsumedCapacity="TOTAL"  # type: ignore
             )
+            print("Commit", ret)
 
             for table in ret["ConsumedCapacity"]:
                 StorageStatistics.instance().add_write_units(

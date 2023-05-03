@@ -126,27 +126,27 @@ class CreateNodeExecutor(Executor):
         self._node.created = Version(self._counter, None)
         self._node.modified = Version(self._counter, None)
 
-        system_storage.commit_nodes(
-            [
-                system_storage.generate_commit_node(
-                    self._node,
-                    self._timestamp,
-                    set(
-                        [
-                            NodeDataType.CREATED,
-                            NodeDataType.MODIFIED,
-                            NodeDataType.CHILDREN,
-                        ]
-                    ),
-                    self.event_id,
-                ),
-                system_storage.generate_commit_node(
-                    self._parent_node,
-                    self._parent_timestamp,
-                    set([NodeDataType.CHILDREN]),
-                ),
-            ],
-        )
+        # system_storage.commit_nodes(
+        #    [
+        #        system_storage.generate_commit_node(
+        #            self._node,
+        #            self._timestamp,
+        #            set(
+        #                [
+        #                    NodeDataType.CREATED,
+        #                    NodeDataType.MODIFIED,
+        #                    NodeDataType.CHILDREN,
+        #                ]
+        #            ),
+        #            self.event_id,
+        #        ),
+        #        system_storage.generate_commit_node(
+        #            self._parent_node,
+        #            self._parent_timestamp,
+        #            set([NodeDataType.CHILDREN]),
+        #        ),
+        #    ],
+        # )
 
         return (True, {})
 

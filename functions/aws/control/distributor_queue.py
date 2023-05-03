@@ -114,7 +114,6 @@ class DistributorQueueSQS(DistributorQueue):
             MessageGroupId="0",
             MessageDeduplicationId=event.event_id,
         )
-        print(response)
         # We use SQS sequence number as the counter
         new_ctr = int(response["SequenceNumber"])
         return SystemCounter.from_raw_data([new_ctr])
