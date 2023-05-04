@@ -10,7 +10,7 @@ import click
 
 from functions.aws.init import init as aws_init, clean as aws_clean, config as aws_config
 
-def get_env(config: dict) -> dict:
+def get_env(config_json: dict) -> dict:
 
     env = {
         **os.environ,
