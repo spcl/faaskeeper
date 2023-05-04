@@ -100,6 +100,13 @@ class Config:
         else:
             raise RuntimeError("Not implemented!")
 
+        self._benchmarking = False
+        if "BENCHMARKING" in environ:
+            self._benchmarking = environ["BENCHMARKING"].lower() == "true"
+        self._benchmarking_frequency = 1
+        if "BENCHMARKING_FREQUENCY" in environ:
+            self._benchmarking_frequency = int(environ["BENCHMARKING_FREQUENCY"])
+
     @staticmethod
     def instance(with_distributor_queue: bool = True) -> "Config":
         if not Config._instance:
@@ -133,3 +140,11 @@ class Config:
     @property
     def client_channel(self) -> control.ClientChannel:
         return self._client_channel
+
+    @property
+    def benchmarking(self) -> bool:
+        return self._benchmarking
+
+    @property
+    def benchmarking_frequency(self) -> int:
+        return self._benchmarking_frequency

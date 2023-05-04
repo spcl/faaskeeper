@@ -72,6 +72,10 @@ def export(ctx, provider: str, config):
         "FK_CLIENT_CHANNEL": str(config_json["client-channel"]),
         "SLS_DEBUG": "*",
     }
+    if "configuration" in config_json:
+        env["FK_FUNCTION_BENCHMARKING"] = str(config_json["configuration"]["benchmarking"])
+        env["FK_FUNCTION_BENCHMARKING_FREQUENCY"] = str(config_json["configuration"]["benchmarking-frequency"])
+
     service_name = config_json["deployment-name"]
     try:
         logging.info(
@@ -104,6 +108,10 @@ def service(output_config: str, provider: str, config, clean: bool):
         "FK_CLIENT_CHANNEL": str(config_json["client-channel"]),
         "SLS_DEBUG": "*",
     }
+    if "configuration" in config_json:
+        env["FK_FUNCTION_BENCHMARKING"] = str(config_json["configuration"]["benchmarking"])
+        env["FK_FUNCTION_BENCHMARKING_FREQUENCY"] = str(config_json["configuration"]["benchmarking-frequency"])
+
     service_name = config_json["deployment-name"]
     if clean:
         try:
@@ -148,6 +156,10 @@ def functions(provider: str, config, function: str):
         "FK_DISTRIBUTOR_QUEUE": str(config_json["distributor-queue"]),
         "FK_CLIENT_CHANNEL": str(config_json["client-channel"])
     }
+    if "configuration" in config_json:
+        env["FK_FUNCTION_BENCHMARKING"] = str(config_json["configuration"]["benchmarking"])
+        env["FK_FUNCTION_BENCHMARKING_FREQUENCY"] = str(config_json["configuration"]["benchmarking-frequency"])
+
     service_name = config_json["deployment-name"]
     logging.info(f"Deploy functions to service {service_name} at provider: {provider}")
 
@@ -186,6 +198,10 @@ def remove_service(provider: str, config):
         "FK_DISTRIBUTOR_QUEUE": str(config_json["distributor-queue"]),
         "FK_CLIENT_CHANNEL": str(config_json["client-channel"])
     }
+    if "configuration" in config_json:
+        env["FK_FUNCTION_BENCHMARKING"] = str(config_json["configuration"]["benchmarking"])
+        env["FK_FUNCTION_BENCHMARKING_FREQUENCY"] = str(config_json["configuration"]["benchmarking-frequency"])
+
     service_name = config_json["deployment-name"]
     logging.info(f"Remove existing service {service_name} at provider: {provider}")
     execute(f"sls export-env --stage {service_name} -c {provider}.yml", env=env)

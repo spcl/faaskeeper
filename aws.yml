@@ -32,6 +32,8 @@ functions:
       SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
       DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
       CLIENT_CHANNEL: ${env:FK_CLIENT_CHANNEL}
+      BENCHMARKING: ${env:FK_FUNCTION_BENCHMARKING}
+      BENCHMARKING_FREQUENCY: ${env:FK_FUNCTION_BENCHMARKING_FREQUENCY}
       QUEUE_PREFIX: ${self:service}-${opt:stage, self:provider.stage}
       S3_DATA_BUCKET: ${self:resources.Resources.dataBucket.Properties.BucketName}
     iamRoleStatements:
@@ -92,6 +94,8 @@ functions:
       DISTRIBUTOR_QUEUE: ${env:FK_DISTRIBUTOR_QUEUE}
       CLIENT_CHANNEL: ${env:FK_CLIENT_CHANNEL}
       QUEUE_PREFIX: ${self:service}-${opt:stage, self:provider.stage}
+      BENCHMARKING: ${env:FK_FUNCTION_BENCHMARKING}
+      BENCHMARKING_FREQUENCY: ${env:FK_FUNCTION_BENCHMARKING_FREQUENCY}
     iamRoleStatements:
       - Effect: Allow
         Action:
