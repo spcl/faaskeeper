@@ -271,13 +271,19 @@ class SetDataExecutor(Executor):
         # store only the modified version counter
         # the new data will be written by the distributor
         self._system_node.modified = Version(self._counter, None)
-        if not system_storage.commit_node(
+        # if not system_storage.commit_node(
+        #    self._system_node,
+        #    self._timestamp,
+        #    set([NodeDataType.MODIFIED]),
+        #    self.event_id,
+        # ):
+        #    return (False, {"status": "failure", "reason": "unknown"})
+        system_storage.commit_node(
             self._system_node,
             self._timestamp,
             set([NodeDataType.MODIFIED]),
             self.event_id,
-        ):
-            return (False, {"status": "failure", "reason": "unknown"})
+        )
         end_commit = time.time()
         if self._config.benchmarking:
             self._stats.add_result("commit", end_commit - begin_commit)
