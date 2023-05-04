@@ -11,7 +11,7 @@ class TimingStatistics:
 
     def reset(self):
         self._repetitions = 0
-        self._results = defaultdict(float)
+        self._results = defaultdict(list)
 
     @staticmethod
     def instance() -> "TimingStatistics":
@@ -27,9 +27,9 @@ class TimingStatistics:
         self._repetitions += 1
 
     def add_result(self, key: str, val: float):
-        self._results[key] += val
+        self._results[key].append(val)
 
     def print(self):
 
         for key, value in self._results.items():
-            print(f"Result_{key} {value}")
+            print(f"Result: {key} Value: {value}")

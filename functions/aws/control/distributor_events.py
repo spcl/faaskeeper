@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import logging
+import time
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from typing import Dict, List, Optional, Set, Type
@@ -13,6 +14,7 @@ from faaskeeper.watch import WatchEventType
 from functions.aws.model import SystemStorage
 from functions.aws.model.system_storage import Node as SystemNode
 from functions.aws.model.user_storage import Storage as UserStorage
+from functions.aws.stats import TimingStatistics
 
 
 class DistributorEventType(IntEnum):
@@ -32,6 +34,10 @@ class DistributorEvent(ABC):
         self._session_id = session_id
         self._event_id = event_id
         self._lock_timestamp = lock_timestamp
+        from functions.aws.config import Config
+
+        self._config = Config.instance(False)
+        self._timing_stats = TimingStatistics.instance()
 
     @property
     def session_id(self) -> str:
@@ -329,6 +335,8 @@ class DistributorSetData(DistributorEvent):
         epoch_counters: Set[str],
     ) -> Optional[dict]:
 
+        if self._config.benchmarking:
+            begin_read = time.time()
         system_node = system_storage.read_node(self.node)
 
         status = self._node_status(system_node)
@@ -365,15 +373,28 @@ class DistributorSetData(DistributorEvent):
                         "path": self.node.path,
                         "reason": "update_not_committed",
                     }
+        if self._config.benchmarking:
+            end_read = time.time()
+            self._timing_stats.add_result("exec_read", end_read - begin_read)
 
         """
         On DynamoDB we skip updating the created version as it doesn't change.
         On S3, we need to write this every single time.
         """
+        if self._config.benchmarking:
+            begin_write = time.time()
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.node, set([NodeDataType.MODIFIED, NodeDataType.DATA]))
+        if self._config.benchmarking:
+            end_write = time.time()
+            self._timing_stats.add_result("exec_update", end_write - begin_write)
 
+        if self._config.benchmarking:
+            begin_pop = time.time()
         system_storage.pop_pending_update(system_node.node)
+        if self._config.benchmarking:
+            end_pop = time.time()
+            self._timing_stats.add_result("exec_pop_updates", end_pop - begin_pop)
 
         return {
             "status": "success",

@@ -15,6 +15,7 @@ from faaskeeper.operations import (
     SetData,
 )
 from faaskeeper.version import SystemCounter, Version
+from functions.aws.config import Config
 from functions.aws.control.channel import Client
 from functions.aws.control.distributor_events import (
     DistributorCreateNode,
@@ -30,6 +31,7 @@ class Executor(ABC):
     def __init__(self, event_id: str, op: RequestOperation):
         self._op = op
         self._event_id = event_id
+        self._config = Config.instance()
 
     @property
     def event_id(self) -> str:
@@ -215,8 +217,10 @@ class SetDataExecutor(Executor):
     def lock_and_read(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
 
         path = self.op.path
-        logging.info(f"Attempting to write data at {path}")
-        self._begin = time.time()
+        if self._config.benchmarking:
+            self._begin = time.time()
+        else:
+            logging.debug(f"Attempting to write data at {path}")
 
         begin_lock = time.time()
         # FIXME :limit number of attempts
@@ -228,7 +232,8 @@ class SetDataExecutor(Executor):
             else:
                 break
         end_lock = time.time()
-        self._stats.add_result("lock", end_lock - begin_lock)
+        if self._config.benchmarking:
+            self._stats.add_result("lock", end_lock - begin_lock)
 
         # does the node exist?
         if self._system_node is None:
@@ -254,7 +259,8 @@ class SetDataExecutor(Executor):
             client,
         )
         end_push = time.time()
-        self._stats.add_result("push", end_push - begin_push)
+        if self._config.benchmarking:
+            self._stats.add_result("push", end_push - begin_push)
 
     def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
 
@@ -273,11 +279,13 @@ class SetDataExecutor(Executor):
         ):
             return (False, {"status": "failure", "reason": "unknown"})
         end_commit = time.time()
-        self._stats.add_result("commit", end_commit - begin_commit)
+        if self._config.benchmarking:
+            self._stats.add_result("commit", end_commit - begin_commit)
 
-        end = time.time()
-        self._stats.add_result("total", end - self._begin)
-        self._stats.add_repetition()
+        if self._config.benchmarking:
+            end = time.time()
+            self._stats.add_result("total", end - self._begin)
+            self._stats.add_repetition()
 
         return (True, {})
 

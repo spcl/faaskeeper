@@ -90,7 +90,10 @@ def handler(event: dict, context):
         else:
             processed_events += 1
 
-        if timing_stats.repetitions % 100 == 0:
+        if (
+            config.benchmarking
+            and timing_stats.repetitions % config.benchmarking_frequency == 0
+        ):
             timing_stats.print()
 
     print(f"Successfully processed {processed_events} records out of {len(events)}")

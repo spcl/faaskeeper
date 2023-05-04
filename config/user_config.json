@@ -9,5 +9,9 @@
   "heartbeat-frequency": 12,
   "worker-queue": "dynamodb",
   "distributor-queue": "sqs",
-  "client-channel": "sqs"
+  "client-channel": "sqs",
+  "configuration": {
+    "benchmarking": "True",
+    "benchmarking-frequency": 1
+  }
 }
