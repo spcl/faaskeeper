@@ -9,6 +9,7 @@ import subprocess
 import click
 
 from functions.aws.init import init as aws_init, clean as aws_clean, config as aws_config
+from functions.gcp.init import init as gcp_init
 
 def get_env(config_json: dict) -> dict:
 
@@ -150,6 +151,17 @@ def functions(provider: str, config, function: str):
             f"sls deploy --stage {service_name} --function {func} -c {provider}.yml",
             env=env,
         )
+
+@deploy.command()
+@common_params
+def localtestgcp(provider: str, config):
+    config_json = json.load(config)
+    service_name = config_json["deployment-name"]
+    if provider == "gcp":
+        gcp_init(f"faaskeeper-{service_name}", "us-central1")
+        # final_config = aws_config(config_json)
+        # logging.info(f"Exporting FaaSKeeper config to {output_config}!")
+        # json.dump(final_config, open(output_config, 'w'), indent=2)
 
 
 @cli.group(invoke_without_command=True)

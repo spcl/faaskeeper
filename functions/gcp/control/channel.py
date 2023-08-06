@@ -1,3 +1,6 @@
+'''
+Make TCP connect as the default kept in a general template folder, and write pubsub implementation under gcp folder  
+'''
 import json
 import logging
 import os
@@ -5,16 +8,15 @@ import socket
 from abc import ABC, abstractmethod
 from typing import Optional
 
-import boto3
-from botocore.exceptions import ClientError
-
-
-def get_object(obj: dict):
-    return next(iter(obj.values()))
+# def get_object(obj: dict):
+#     return next(iter(obj.values()))
 
 
 # FIXME: in future we should have a generic class for request
-# and support for DynamodB items
+# and support for GCP services
+
+# we should keep class ClientChannelSQS inside functions/aws and move class Client, ClientChannel and ClientChannelTCP out to a generic template folder
+# for now, I add another parameter in client serialize and deserialize func
 class Client:
     def __init__(self):
         self.session_id: str
@@ -25,12 +27,14 @@ class Client:
     @staticmethod
     def deserialize(dct: dict):
         client = Client()
-        client.session_id = get_object(dct["session_id"])
-        client.timestamp = get_object(dct["timestamp"])
+        # client.session_id = get_object(dct["session_id"])
+        # client.timestamp = get_object(dct["timestamp"])
+        client.session_id = dct["session_id"]
+        client.timestamp = dct["timestamp"]
         if "sourceIP" in dct:
-            client.sourceIP = get_object(dct["sourceIP"])
+            client.sourceIP = dct["sourceIP"]
         if "sourcePort" in dct:
-            client.sourcePort = get_object(dct["sourcePort"])
+            client.sourcePort = dct["sourcePort"]
 
         return client
 
@@ -41,6 +45,9 @@ class Client:
         if self.sourcePort is not None:
             data["sourcePort"] = self.sourcePort
         return data
+    
+    def __str__(self) -> str:
+        return f"session id: {self.session_id}, timestamp: {self.timestamp}, sourceIP: {self.sourceIP}, sourcePort: {self.sourcePort}"
 
 
 class ClientChannel(ABC):
@@ -91,37 +98,37 @@ class ClientChannelTCP(ClientChannel):
             logging.error(f"Notification of client {user} failed!")
 
 
-class ClientChannelSQS(ClientChannel):
-    def __init__(self):
-        self._sqs = boto3.client("sqs", region_name=os.environ["AWS_REGION"])
-        self._queues = {}
-        self._deployment = os.environ["DEPLOYMENT_NAME"]
+# class ClientChannelSQS(ClientChannel):
+#     def __init__(self):
+#         self._sqs = boto3.client("sqs", region_name=os.environ["AWS_REGION"])
+#         self._queues = {}
+#         self._deployment = os.environ["DEPLOYMENT_NAME"]
 
-    def _get_queue(self, user: Client) -> str:
+#     def _get_queue(self, user: Client) -> str:
 
-        queue = self._queues.get(user.session_id, None)
+#         queue = self._queues.get(user.session_id, None)
 
-        if queue is None:
+#         if queue is None:
 
-            queue_name = f"faaskeeper-{self._deployment}-client-sqs"
-            try:
-                queue = self._sqs.get_queue_url(QueueName=queue_name)["QueueUrl"]
-            except ClientError as error:
-                logging.exception(f"Couldn't get queue named {queue_name}")
-                raise error
+#             queue_name = f"faaskeeper-{self._deployment}-client-sqs"
+#             try:
+#                 queue = self._sqs.get_queue_url(QueueName=queue_name)["QueueUrl"]
+#             except ClientError as error:
+#                 logging.exception(f"Couldn't get queue named {queue_name}")
+#                 raise error
 
-            self._queues[user.session_id] = queue
+#             self._queues[user.session_id] = queue
 
-        return queue
+#         return queue
 
-    def notify(self, user: Client, ret: dict):
+#     def notify(self, user: Client, ret: dict):
 
-        try:
-            queue = self._get_queue(user)
-            self._sqs.send_message(
-                QueueUrl=queue,
-                MessageBody=json.dumps({**ret, "event": user.timestamp}),
-            )
-        except ClientError as error:
-            logging.error(f"Notification of client {user} failed!")
-            raise error
+#         try:
+#             queue = self._get_queue(user)
+#             self._sqs.send_message(
+#                 QueueUrl=queue,
+#                 MessageBody=json.dumps({**ret, "event": user.timestamp}),
+#             )
+#         except ClientError as error:
+#             logging.error(f"Notification of client {user} failed!")
+#             raise error
