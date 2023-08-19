@@ -22,7 +22,7 @@ class DistributorQueue(ABC):
         pass
 
 class DistributorQueuePubSub(DistributorQueue):
-    def __init__(self, topic_id: str, project_id: str = None) -> None:
+    def __init__(self,  project_id: str, topic_id: str) -> None:
         '''
         project_id is not necessary to set if you have GOOGLE_APPLICATION_CREDENTIALS configured
         '''
@@ -35,10 +35,10 @@ class DistributorQueuePubSub(DistributorQueue):
         publisher_options = pubsub_v1.types.PublisherOptions(enable_message_ordering=True) # enable FIFO
         # client option here is to specify the region because fifo is only guaranteed in the same region
         self.publisher_client = pubsub_v1.PublisherClient(publisher_options=publisher_options, batch_settings= batch_settings)
-        # self.topic_id = topic_id # faasPubSub
-        self._project_id = "top-cascade-392319"
+        self._topic_id = topic_id # faasPubSub
+        self._project_id = project_id
         # maybe we need to create a topic by code, or can it be set in yaml
-        self._topic_id = "faasPubSub" #distributor
+        # self._topic_id = "faasPubSub" #distributor
         self._topic_path = self.publisher_client.topic_path(self._project_id, self._topic_id)
 
     @property
