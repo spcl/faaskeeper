@@ -19,9 +19,9 @@ class CloudStorage(Storage):
         WARNING: Object deletion cannot be undone. 
         '''
         blob = self._bucket.blob(key)
-        generation_match_precondition = None
+        # generation_match_precondition = None
 
-        blob.reload()
+        blob.reload() # delete only if the generation matches
         generation_match_precondition = blob.generation
 
         blob.delete(if_generation_match=generation_match_precondition)

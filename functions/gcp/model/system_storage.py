@@ -78,13 +78,13 @@ class SystemStateStorage(ABC):
         # we separate commit_node from unlock node
         pass
     
-    # @abstractmethod
-    # def commit_and_unlock_node(self, node: Node, timestamp: int, updates: Set[faaskeeper.NodeDataType] = set(), update_event_id: Optional[str] = None):
-    #     # self.commit_node
-    #     pass
+    @abstractmethod
+    def commit_and_unlock_node(self, node: Node, timestamp: int, updates: Set[NodeDataType] = set(), update_event_id: Optional[str] = None) -> bool:
+        # self.commit_node
+        pass
 
     @abstractmethod
-    def commit_and_unlock_nodes_multi(self, updates: List[dict], deletions: List[dict] = [], return_old_on_failure: Optional[List[Node]] = None,) -> Tuple[bool, List[NodeWithLock]]:
+    def commit_and_unlock_nodes_multi(self, updates: List[NodeWithLock], deletions: List[NodeWithLock] = [],return_old_on_failure: Optional[List[Node]] = None,) -> Tuple[bool, List[NodeWithLock]]:
           # self.commit_nodes
           # commit a list of node updates
         pass
@@ -97,13 +97,12 @@ class SystemStateStorage(ABC):
     # def delete_node(self, node: Node, timestamp: int, update_event_id: Optional[str] = None):
     #     pass
 
-    # @abstractmethod
-    # def generate_delete_params_from_node(self, node: Node, timestamp: int, update_event_id: Optional[str] = None):
-    #     pass
+    @abstractmethod
+    def generate_delete_node(self, node: Node, timestamp: int, update_event_id: Optional[str] = None):
+        pass
 
     # @abstractmethod
     # def increase_system_counter(self, writer_func_id: int) -> Optional[SystemCounter]:
-    #     # parallel event writer functions
     #     pass
 
     @abstractmethod 
@@ -173,7 +172,7 @@ class DataStoreSystemStateStorage(SystemStateStorage):
                         n: Optional[Node] = None
                         if "cFxidSys" in node_info:
                             n = Node(path)
-                            created = SystemCounter.from_provider_schema(
+                            created = SystemCounter.from_raw_data(
                                 node_info["cFxidSys"]  # type: ignore
                             )
                             n.created = Version(
@@ -181,7 +180,7 @@ class DataStoreSystemStateStorage(SystemStateStorage):
                                 None
                                 # EpochCounter.from_provider_schema(data["cFxidEpoch"]),
                             )
-                            modified = SystemCounter.from_provider_schema(
+                            modified = SystemCounter.from_raw_data(
                                 node_info["mFxidSys"]  # type: ignore
                             )
                             n.modified = Version(
@@ -231,12 +230,38 @@ class DataStoreSystemStateStorage(SystemStateStorage):
         except self._state_storage.errorSupplier.Conflict:
             print("there is a conflict, lock node fails")
             return False
-    
-    # def commit_and_unlock_node(self, node: Node, timestamp: int, updates: Set[faaskeeper.NodeDataType] = set(), update_event_id: str = None):
-    #     """
-    #     commit updates and unlock
-    #     """
-    #     return 2
+
+    def commit_and_unlock_node(self, node: Node, timestamp: int, updates: Set[NodeDataType] = set(), update_event_id: Optional[str] = None) -> bool:
+        local_client = self._state_storage.client
+        assert local_client is not None
+
+        success: bool
+        
+        try:
+            with local_client.transaction():
+                key = local_client.key(self._state_storage.storage_name, node.path)
+                node_info = local_client.get(key)
+
+                if node_info is not None:
+                    to_commit = self.generate_commit_node(node, timestamp, updates, update_event_id)
+                    if "timelock" in node_info and node_info["timelock"] == to_commit._lock:
+                        # unlock timelock, commit details should not have "timelock"
+                        del node_info["timelock"] # remove timelock in the node
+                        assert "timelock" not in to_commit.commit_details
+
+                        if to_commit._update_event_id_to_append is not None:
+                            temp = node_info["pendingUpdates"] + to_commit._update_event_id_to_append
+                            to_commit.commit_details["pendingUpdates"] = temp
+
+                        # we should overlap with node
+                        for property_to_update in to_commit.commit_details:
+                            node_info[property_to_update] = to_commit.commit_details[property_to_update]
+                        print("system_storage | node to update:", node)
+                        local_client.put(node_info)
+        except self._state_storage.errorSupplier.Conflict:
+            print("there is a conflict, lock node fails")
+            success = False
+            return success
 
     class CommitNode(NodeWithLock):
         def __init__(self, node: Node, status: NodeWithLock.Status, timelock: NodeWithLock.Lock):
@@ -284,14 +309,13 @@ class DataStoreSystemStateStorage(SystemStateStorage):
                         del node["timelock"] # remove timelock in the node
                         assert "timelock" not in to_commit.commit_details
 
-                        if to_commit._update_event_id_to_append is not None:
+                        if to_commit._update_event_id_to_append is not None: # set data
                             temp = node["pendingUpdates"] + to_commit._update_event_id_to_append
                             to_commit.commit_details["pendingUpdates"] = temp
 
                         # we should overlap with node
                         for property_to_update in to_commit.commit_details:
                             node[property_to_update] = to_commit.commit_details[property_to_update]
-                        node.update(to_commit.commit_details)
                         print("system_storage | node to update:", node)
                         nodes_to_update.append(node)
 
@@ -299,9 +323,31 @@ class DataStoreSystemStateStorage(SystemStateStorage):
 
                 # deletes
                 delete_keys:List[datastore.Key] = []
+                delete_mapper = {} # str: CommitNode
                 for delete in deletions:
-                    delete_keys.append(local_client.key(f"{self._state_storage.storage_name}-state",delete.node.path))
-                local_client.delete_multi(delete_keys)
+                    delete_keys.append(local_client.key(self._state_storage.storage_name,delete.node.path))
+                    delete_mapper[delete.node.path] = delete
+                nodes_to_delete = []
+                nodes = local_client.get_multi(delete_keys)
+                for node in nodes:
+                    to_commit: DataStoreSystemStateStorage.CommitNode = delete_mapper[node.key.name]
+                    if "timelock" in node and node["timelock"] == to_commit._lock:
+                        del node["timelock"]
+                        del node["cFxidSys"]
+                        del node["mFxidSys"]
+                        del node["children"]
+
+                        if to_commit._update_event_id_to_append is not None: # set data
+                            temp = node["pendingUpdates"] + to_commit._update_event_id_to_append
+                            to_commit.commit_details["pendingUpdates"] = temp
+                        else:
+                            # we only keep pendingUpdates, remove created, modified, children, timelock
+                            to_commit.commit_details["pendingUpdates"] = node["pendingUpdates"]
+                        
+                        node["pendingUpdates"] = to_commit.commit_details["pendingUpdates"]
+                        print("system_storage | node to delete:", node)
+                        nodes_to_delete.append(node)
+                local_client.put_multi(nodes_to_delete)
 
                 StorageStatistics.instance().add_write_units(len(update_keys) + len(delete_keys)) # AWS has CapacityUnits, what is the equavelent for GCP?
                 
@@ -321,7 +367,6 @@ class DataStoreSystemStateStorage(SystemStateStorage):
         local_client = self._state_storage.client
         assert local_client is not None
 
-        ret: DataStoreSystemStateStorage.CommitNode
         ret = DataStoreSystemStateStorage.CommitNode(node, status=None, timelock=timestamp) # we do not need Exist property here
 
         update_values = {}
@@ -354,7 +399,6 @@ class DataStoreSystemStateStorage(SystemStateStorage):
 
         key = local_client.key(self._state_storage.storage_name, node.path)
         res = local_client.get(key)
-        print("read node | check cFxidSys time", res)
         StorageStatistics.instance().add_read_units(1)
         
         return self._parse_node(node, res)
@@ -423,3 +467,17 @@ class DataStoreSystemStateStorage(SystemStateStorage):
         except self._state_storage.errorSupplier.Conflict:
             print("lock_node |", "there is a conflict, lock node fails")
             return (None)
+    
+    def generate_delete_node(self, node: Node, timestamp: int, update_event_id: Optional[str] = None):
+        local_client = self._state_storage.client
+        assert local_client is not None
+
+        ret = DataStoreSystemStateStorage.CommitNode(node, status=None, timelock=timestamp) # we do not need Exist property here
+
+        if update_event_id is not None:
+            ret._update_event_id_to_append = [update_event_id]
+            
+        ret.commit_details = {}
+        print("system_storage | generate_delete_node", node.path)
+
+        return ret

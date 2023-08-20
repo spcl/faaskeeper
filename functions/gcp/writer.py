@@ -40,26 +40,14 @@ def handler(request):
     # FIXME: BUT we still need to agree on a schema from client to writer
     # using pubsub http push to make sure ordering as firestore in datastore mode
     # does not guarantee ordering
-    # request_json = request.get_json(silent=True)
-    # record = request_json["message"]["data"]
-    # write_event = json.loads(record)
-    # ===
-    payload = {
-        "op": "create_node",
-        "path": "/root",
-        "data": "ImRhdGF2ZXIxIg==",#base64.b64encoded
-        "session_id": "fa3a0cf0", # is defined in the client library
-        "timestamp": "fa3a0cf0-5",
-        "flags": "0",
-        "event_id": "7c75aaaf0413f5ef82320e05f689cb38"
-    }
-    write_event = payload
-    print("writer |",write_event)
-    # ===
+    request_json = request.get_json(silent=True)
+    record = base64.b64decode(request_json["message"]["data"]).decode("utf-8")
+    write_event = json.loads(record)
 
     # event_id
-    event_id = write_event["event_id"]
-    # write_event["timestamp"]
+    event_id = request_json["message"]["message_id"]
+    # event_id = write_event["event_id"]
+    write_event["timestamp"] = request_json["message"]["publish_time"]
 
     client = Client.deserialize(write_event)
     # we dont need to parse event in GCP
@@ -72,13 +60,8 @@ def handler(request):
 
     if ret: # ret must NOT be {}
         if ret["status"] == "failure":
-                logging.error(f"Failed processing write event {event_id}: {ret}")
+            logging.error(f"Failed processing write event {event_id}: {ret}")
         # FIXME: TEMP
         # config.client_channel.notify(client, ret)
 
-# FIXME: TEMP
-def main():
-    handler(None)
-
-if __name__ == "__main__":
-    main()
+    return 'OK'

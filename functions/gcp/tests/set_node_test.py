@@ -6,12 +6,13 @@ def main():
     writerQueue = DistributorQueuePubSub("top-cascade-392319", "faasWriter") # worker-queue
 
     payload = {
-        "op": "create_node",
+        "op": "set_data",
         "path": "/root39",
-        "data": "ImRhdGF2ZXIxIg==",#base64.b64encoded
+        "data": "ImRhdGF2ZXIyIg==",#base64.b64encoded
         "session_id": "fa3a0cf0", # is defined in the client library
         "timestamp": "fa3a0cf0-2",
-        "flags": "0",
+        "version": "1691711745881562"
+        # "flags": "0",
         # "event_id": "7c75aaaf0413f5ef82320e05f689cb38"
     }
 

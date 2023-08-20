@@ -67,6 +67,7 @@ class DistributorEvent(ABC):
         '''
         pass
 
+    # FIXME: another way to design this is to create class like DistributorEventAWS DistributorEventGCP inherent from the base class
     @staticmethod
     @abstractmethod
     def deserialize(event_data: dict, cloud_provider: CLOUD_PROVIDER = CLOUD_PROVIDER.AWS):
@@ -325,319 +326,370 @@ class DistributorCreateNode(DistributorEvent):
         return DistributorEventType.CREATE_NODE
 
 
-# class DistributorSetData(DistributorEvent):
+class DistributorSetData(DistributorEvent):
 
-#     _type_deserializer = TypeDeserializer()
+    _type_deserializer = TypeDeserializer()
 
-#     def __init__(self, event_id: str, session_id: str, lock_timestamp: int, node: Node):
-#         super().__init__(event_id, session_id, lock_timestamp)
-#         self._node = node
+    def __init__(self, event_id: str, session_id: str, lock_timestamp: int, node: Node):
+        super().__init__(event_id, session_id, lock_timestamp)
+        self._node = node
 
-#     def serialize(self, serializer, base64_encoded=True) -> dict:
-#         """We must use JSON.
-#         IP and port are already serialized.
-#         """
-#         data = {
-#             "type": serializer.serialize(self.type.value),
-#             "session_id": serializer.serialize(self.session_id),
-#             "event_id": serializer.serialize(self.event_id),
-#             "lock_timestamp": serializer.serialize(self.lock_timestamp),
-#             "path": serializer.serialize(self.node.path),
-#             "counter": self.node.modified.system.version,
-#         }
+    def serialize(self, serializer, cloud_provider: CLOUD_PROVIDER = CLOUD_PROVIDER.AWS, base64_encoded=True) -> dict:
+        """We must use JSON.
+        IP and port are already serialized.
+        """
+        data = {}
 
-#         if base64_encoded:
-#             data["data"] = {"B": self.node.data_b64}
-#         else:
-#             data["data"] = {"B": base64.b64decode(self.node.data_b64)}
+        if cloud_provider == CLOUD_PROVIDER.AWS:
+            data = {
+                "type": serializer.serialize(self.type.value),
+                "session_id": serializer.serialize(self.session_id),
+                "event_id": serializer.serialize(self.event_id),
+                "lock_timestamp": serializer.serialize(self.lock_timestamp),
+                "path": serializer.serialize(self.node.path),
+                "counter": self.node.modified.system.version,
+            }
 
-#         return data
+            if base64_encoded:
+                data["data"] = {"B": self.node.data_b64}
+            else:
+                data["data"] = {"B": base64.b64decode(self.node.data_b64)}
+        
+        elif cloud_provider == CLOUD_PROVIDER.GCP:
+            data = {
+                "type": self.type.value,
+                "session_id": self.session_id,
+                "event_id": self.event_id,
+                "lock_timestamp": self.lock_timestamp,
+                "path": self.node.path,
+                "counter": self.node.modified.system._version,
+            }
+            
+            if base64_encoded:
+                data["data"] = self.node.data_b64
+            else:
+                data["data"] = str(base64.b64decode(self.node.data_b64))
+            
+        return data
 
-#     @staticmethod
-#     def deserialize(event_data: dict):
+    @staticmethod
+    def deserialize(event_data: dict, cloud_provider: CLOUD_PROVIDER = CLOUD_PROVIDER.AWS):
+        if cloud_provider == CLOUD_PROVIDER.AWS:
+            deserializer = DistributorSetData._type_deserializer
+            node = Node(deserializer.deserialize(event_data["path"]))
+            counter = SystemCounter.from_provider_schema(event_data["counter"])
+            node.modified = Version(counter, None)
+            # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
+            # node.data = base64.b64decode(event_data["data"]["B"])
+            node.data_b64 = event_data["data"]["B"]
 
-#         deserializer = DistributorSetData._type_deserializer
-#         node = Node(deserializer.deserialize(event_data["path"]))
-#         counter = SystemCounter.from_provider_schema(event_data["counter"])
-#         node.modified = Version(counter, None)
-#         # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
-#         # node.data = base64.b64decode(event_data["data"]["B"])
-#         node.data_b64 = event_data["data"]["B"]
+            session_id = deserializer.deserialize(event_data["session_id"])
+            event_id = deserializer.deserialize(event_data["event_id"])
+            lock_timestamp = deserializer.deserialize(event_data["lock_timestamp"])
+        
+        elif cloud_provider == CLOUD_PROVIDER.GCP:
+            node = Node(event_data["path"])
+            counter = SystemCounter.from_raw_data(event_data["counter"])
+            node.modified = Version(counter, None)
+            # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
+            # node.data = base64.b64decode(event_data["data"]["B"])
+            node.data_b64 = event_data["data"]
 
-#         session_id = deserializer.deserialize(event_data["session_id"])
-#         event_id = deserializer.deserialize(event_data["event_id"])
-#         lock_timestamp = deserializer.deserialize(event_data["lock_timestamp"])
+            session_id = event_data["session_id"]
+            event_id = event_data["event_id"]
+            lock_timestamp = event_data["lock_timestamp"]
 
-#         return DistributorSetData(event_id, session_id, lock_timestamp, node)
+        return DistributorSetData(event_id, session_id, lock_timestamp, node)
 
-#     def _node_status(self, system_node: SystemNode) -> TriBool:
+    def _node_status(self, system_node: SystemNodeWithLock) -> TriBool:
 
-#         # The node is no longer locked, but the update is not there
-#         if (
-#             len(system_node.pending_updates) == 0
-#             or system_node.pending_updates[0] != self.event_id
-#         ):
-#             if system_node.isLocked and system_node.lock.timestamp == self.lock_timestamp:
-#                 return TriBool.LOCKED
-#             else:
-#                 return TriBool.INCORRECT
-#         else:
-#             return TriBool.CORRECT
+        # The node is no longer locked, but the update is not there
+        if (
+            len(system_node.pending_updates) == 0
+            or system_node.pending_updates[0] != self.event_id
+        ):
+            if system_node.isLocked and system_node.lock.timestamp == self.lock_timestamp:
+                return TriBool.LOCKED
+            else:
+                return TriBool.INCORRECT
+        else:
+            return TriBool.CORRECT
 
-#     def execute(
-#         self,
-#         system_storage: SystemStorage,
-#         user_storage: UserStorage,
-#         epoch_counters: Set[str],
-#     ) -> Optional[dict]:
+    def execute(
+        self,
+        system_storage: SystemStateStorage,
+        user_storage: UserStorage,
+        epoch_counters: Set[str],
+    ) -> Optional[dict]:
 
-#         if self._config.benchmarking:
-#             begin_read = time.time()
-#         system_node = system_storage.read_node(self.node)
+        if self._config.benchmarking:
+            begin_read = time.time()
+        system_node = system_storage.read_node(self.node)
 
-#         status = self._node_status(system_node)
+        status = self._node_status(system_node)
 
-#         if status == TriBool.INCORRECT:
-#             logging.error("Failing to apply the update - node updated by someone else")
-#             return {
-#                 "status": "failure",
-#                 "path": self.node.path,
-#                 "reason": "update_not_committed",
-#             }
-#         elif status == TriBool.LOCKED:
+        if status == TriBool.INCORRECT:
+            logging.error("Failing to apply the update - node updated by someone else")
+            return {
+                "status": "failure",
+                "path": self.node.path,
+                "reason": "update_not_committed",
+            }
+        elif status == TriBool.LOCKED:
 
-#             logging.error("Failing to apply the update - node still locked")
+            logging.error("Failing to apply the update - node still locked")
 
-#             commit_status = system_storage.commit_node(
-#                 self.node,
-#                 self.lock_timestamp,
-#                 set([NodeDataType.MODIFIED]),
-#                 self.event_id,
-#             )
-#             # Transaction failed, let's verify that
-#             if not commit_status:
+            commit_status = system_storage.commit_node(
+                self.node,
+                self.lock_timestamp,
+                set([NodeDataType.MODIFIED]),
+                self.event_id,
+            )
+            # Transaction failed, let's verify that
+            if not commit_status:
 
-#                 # We shouldn't do a second read here.
-#                 # Unfortunately, DynamoDB update-item returns the attributes only on a succesful
-#                 # update. When it fails, we need to read manually.
-#                 system_node = system_storage.read_node(self.node)
+                # We shouldn't do a second read here.
+                # Unfortunately, DynamoDB update-item returns the attributes only on a succesful
+                # update. When it fails, we need to read manually.
+                system_node = system_storage.read_node(self.node)
 
-#                 if self._node_status(system_node) != TriBool.CORRECT:
-#                     logging.error("Failing to apply the update - couldn't commit")
-#                     return {
-#                         "status": "failure",
-#                         "path": self.node.path,
-#                         "reason": "update_not_committed",
-#                     }
-#         if self._config.benchmarking:
-#             end_read = time.time()
-#             self._timing_stats.add_result("exec_read", end_read - begin_read)
+                if self._node_status(system_node) != TriBool.CORRECT:
+                    logging.error("Failing to apply the update - couldn't commit")
+                    return {
+                        "status": "failure",
+                        "path": self.node.path,
+                        "reason": "update_not_committed",
+                    }
+        if self._config.benchmarking:
+            end_read = time.time()
+            self._timing_stats.add_result("exec_read", end_read - begin_read)
 
-#         """
-#         On DynamoDB we skip updating the created version as it doesn't change.
-#         On S3, we need to write this every single time.
-#         """
-#         if self._config.benchmarking:
-#             begin_write = time.time()
-#         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
-#         # cuz it contains actual data
-#         user_storage.update(self.node, set([NodeDataType.MODIFIED, NodeDataType.DATA]))
-#         if self._config.benchmarking:
-#             end_write = time.time()
-#             self._timing_stats.add_result("exec_update", end_write - begin_write)
+        """
+        On DynamoDB we skip updating the created version as it doesn't change.
+        On S3, we need to write this every single time.
+        """
+        if self._config.benchmarking:
+            begin_write = time.time()
+        self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
+        # cuz it contains actual data
+        user_storage.update(self.node, set([NodeDataType.MODIFIED, NodeDataType.DATA]))
+        if self._config.benchmarking:
+            end_write = time.time()
+            self._timing_stats.add_result("exec_update", end_write - begin_write)
 
-#         if self._config.benchmarking:
-#             begin_pop = time.time()
-#         system_storage.pop_pending_update(system_node.node)
-#         if self._config.benchmarking:
-#             end_pop = time.time()
-#             self._timing_stats.add_result("exec_pop_updates", end_pop - begin_pop)
+        if self._config.benchmarking:
+            begin_pop = time.time()
+        system_storage.pop_pending_update(system_node.node)
+        if self._config.benchmarking:
+            end_pop = time.time()
+            self._timing_stats.add_result("exec_pop_updates", end_pop - begin_pop)
 
-#         return {
-#             "status": "success",
-#             "path": self.node.path,
-#             "modified_system_counter": self.node.modified.system.serialize(),
-#         }
+        return {
+            "status": "success",
+            "path": self.node.path,
+            "modified_system_counter": self.node.modified.system.serialize(),
+        }
 
-#     @property
-#     def node(self) -> Node:
-#         return self._node
+    @property
+    def node(self) -> Node:
+        return self._node
 
-#     @property
-#     def type(self) -> DistributorEventType:
-#         return DistributorEventType.SET_DATA
+    @property
+    def type(self) -> DistributorEventType:
+        return DistributorEventType.SET_DATA
 
-#     def epoch_counters(self) -> List[str]:
+    def epoch_counters(self) -> List[str]:
 
-#         hashed_path = hashlib.md5(self.node.path.encode()).hexdigest()
-#         return [
-#             f"{hashed_path}_{WatchEventType.NODE_DATA_CHANGED.value}"
-#             f"_{self.node.modified.system.sum}"
-#         ]
+        hashed_path = hashlib.md5(self.node.path.encode()).hexdigest()
+        return [
+            f"{hashed_path}_{WatchEventType.NODE_DATA_CHANGED.value}"
+            f"_{self.node.modified.system.sum}"
+        ]
 
-#     def set_system_counter(self, system_counter: SystemCounter):
+    def set_system_counter(self, system_counter: SystemCounter):
 
-#         self.node.modified = Version(system_counter, None)
+        self.node.modified = Version(system_counter, None)
 
 
-# class DistributorDeleteNode(DistributorEvent):
+class DistributorDeleteNode(DistributorEvent):
 
-#     _type_deserializer = TypeDeserializer()
+    _type_deserializer = TypeDeserializer()
 
-#     def __init__(
-#         self,
-#         event_id: str,
-#         session_id: str,
-#         lock_timestamp: int,
-#         parent_lock_timestamp: int,
-#         node: Node,
-#         parent_node: Node,
-#     ):
-#         super().__init__(event_id, session_id, lock_timestamp)
-#         self._node = node
-#         self._parent_node = parent_node
-#         self._parent_lock_timestamp = parent_lock_timestamp
+    def __init__(
+        self,
+        event_id: str,
+        session_id: str,
+        lock_timestamp: int,
+        parent_lock_timestamp: int,
+        node: Node,
+        parent_node: Node,
+    ):
+        super().__init__(event_id, session_id, lock_timestamp)
+        self._node = node
+        self._parent_node = parent_node
+        self._parent_lock_timestamp = parent_lock_timestamp
 
-#     def serialize(self, serializer, base64_encoded=True) -> dict:
-#         """We must use JSON.
-#         IP and port are already serialized.
-#         """
-#         return {
-#             "type": serializer.serialize(self.type.value),
-#             "session_id": serializer.serialize(self.session_id),
-#             "event_id": serializer.serialize(self.event_id),
-#             "lock_timestamp": serializer.serialize(self.lock_timestamp),
-#             "parent_lock_timestamp": serializer.serialize(self._parent_lock_timestamp),
-#             "path": serializer.serialize(self.node.path),
-#             "parent_path": serializer.serialize(self.parent.path),
-#             "parent_children": serializer.serialize(self.parent.children),
-#         }
+    def serialize(self, serializer, cloud_provider: CLOUD_PROVIDER = CLOUD_PROVIDER.AWS, base64_encoded=True):
+        if cloud_provider == CLOUD_PROVIDER.AWS:
+            return {
+                "type": serializer.serialize(self.type.value),
+                "session_id": serializer.serialize(self.session_id),
+                "event_id": serializer.serialize(self.event_id),
+                "lock_timestamp": serializer.serialize(self.lock_timestamp),
+                "parent_lock_timestamp": serializer.serialize(self._parent_lock_timestamp),
+                "path": serializer.serialize(self.node.path),
+                "parent_path": serializer.serialize(self.parent.path),
+                "parent_children": serializer.serialize(self.parent.children),
+            } 
+        elif cloud_provider == CLOUD_PROVIDER.GCP:
+            return {
+                "type": self.type.value,
+                "session_id": self.session_id,
+                "event_id": self.event_id,
+                "lock_timestamp": self.lock_timestamp,
+                "parent_lock_timestamp": self._parent_lock_timestamp,
+                "path": self.node.path,
+                "parent_path": self.parent.path,
+                "parent_children": self.parent.children,
+            }
 
-#     @staticmethod
-#     def deserialize(event_data: dict):
+    @staticmethod
+    def deserialize(event_data: dict, cloud_provider: CLOUD_PROVIDER = CLOUD_PROVIDER.AWS):
+        # FIXME: custom deserializer
+        if cloud_provider == CLOUD_PROVIDER.AWS:
+            deserializer = DistributorCreateNode._type_deserializer
+            node = Node(deserializer.deserialize(event_data["path"]))
 
-#         # FIXME: custom deserializer
+            parent_node = Node(deserializer.deserialize(event_data["parent_path"]))
+            parent_node.children = deserializer.deserialize(event_data["parent_children"])
 
-#         deserializer = DistributorCreateNode._type_deserializer
-#         node = Node(deserializer.deserialize(event_data["path"]))
+            session_id = deserializer.deserialize(event_data["session_id"])
+            event_id = deserializer.deserialize(event_data["event_id"])
+            lock_timestamp = deserializer.deserialize(event_data["lock_timestamp"])
+            parent_lock_timestamp = deserializer.deserialize(
+                event_data["parent_lock_timestamp"]
+            )
+        
+        elif cloud_provider == CLOUD_PROVIDER.GCP:
+            node = Node(event_data["path"])
 
-#         parent_node = Node(deserializer.deserialize(event_data["parent_path"]))
-#         parent_node.children = deserializer.deserialize(event_data["parent_children"])
+            parent_node = Node(event_data["parent_path"])
+            parent_node.children = event_data["parent_children"]
 
-#         session_id = deserializer.deserialize(event_data["session_id"])
-#         event_id = deserializer.deserialize(event_data["event_id"])
-#         lock_timestamp = deserializer.deserialize(event_data["lock_timestamp"])
-#         parent_lock_timestamp = deserializer.deserialize(
-#             event_data["parent_lock_timestamp"]
-#         )
+            session_id = event_data["session_id"]
+            event_id = event_data["event_id"]
+            lock_timestamp = event_data["lock_timestamp"]
+            parent_lock_timestamp = event_data["parent_lock_timestamp"]
 
-#         return DistributorDeleteNode(
-#             event_id,
-#             session_id,
-#             lock_timestamp,
-#             parent_lock_timestamp,
-#             node,
-#             parent_node,
-#         )
+        return DistributorDeleteNode(
+            event_id,
+            session_id,
+            lock_timestamp,
+            parent_lock_timestamp,
+            node,
+            parent_node,
+        )
 
-#     def _node_status(self, system_node: SystemNode) -> TriBool:
+    def _node_status(self, system_node: SystemNodeWithLock) -> TriBool:
 
-#         # The node is no longer locked, but the update is not there
-#         if (
-#             len(system_node.pending_updates) == 0
-#             or system_node.pending_updates[0] != self.event_id
-#         ):
-#             if system_node.isLocked and system_node.lock.timestamp == self.lock_timestamp:
-#                 return TriBool.LOCKED
-#             else:
-#                 return TriBool.INCORRECT
-#         else:
-#             return TriBool.CORRECT
+        # The node is no longer locked, but the update is not there
+        if (
+            len(system_node.pending_updates) == 0
+            or system_node.pending_updates[0] != self.event_id
+        ):
+            if system_node.isLocked and system_node.lock.timestamp == self.lock_timestamp:
+                return TriBool.LOCKED
+            else:
+                return TriBool.INCORRECT
+        else:
+            return TriBool.CORRECT
 
-#     def execute(
-#         self,
-#         system_storage: SystemStorage,
-#         user_storage: UserStorage,
-#         epoch_counters: Set[str],
-#     ) -> Optional[dict]:
+    def execute(
+        self,
+        system_storage: SystemStateStorage,
+        user_storage: UserStorage,
+        epoch_counters: Set[str],
+    ) -> Optional[dict]:
 
-#         system_node = system_storage.read_node(self.node)
+        system_node = system_storage.read_node(self.node)
 
-#         # TODO: in the future, we want to allow reader-writer locks on the parent node.
-#         # Then, for deletion, it means that we need to search the loop for the pending update
-#         # as we ne longer have the guarantee that our update is the first one.
-#         # The node is no longer locked, but the update is not there
-#         status = self._node_status(system_node)
+        # TODO: in the future, we want to allow reader-writer locks on the parent node.
+        # Then, for deletion, it means that we need to search the loop for the pending update
+        # as we ne longer have the guarantee that our update is the first one.
+        # The node is no longer locked, but the update is not there
+        status = self._node_status(system_node)
 
-#         if status == TriBool.INCORRECT:
-#             logging.error("Failing to apply the update - node updated by someone else")
-#             return {
-#                 "status": "failure",
-#                 "path": self.node.path,
-#                 "reason": "update_not_committed",
-#             }
+        if status == TriBool.INCORRECT:
+            logging.error("Failing to apply the update - node updated by someone else")
+            return {
+                "status": "failure",
+                "path": self.node.path,
+                "reason": "update_not_committed",
+            }
 
-#         elif status == TriBool.LOCKED:
-#             logging.error("Failing to apply the update - node still locked")
+        elif status == TriBool.LOCKED:
+            logging.error("Failing to apply the update - node still locked")
 
-#             transaction_status, old_nodes = system_storage.commit_nodes(
-#                 [
-#                     system_storage.generate_commit_node(
-#                         self._parent_node,
-#                         self._parent_lock_timestamp,
-#                         set([NodeDataType.CHILDREN]),
-#                     ),
-#                     system_storage.generate_delete_node(
-#                         self.node, self.lock_timestamp, self.event_id
-#                     ),
-#                 ],
-#                 return_old_on_failure=[self._parent_node, self._node],
-#             )
-#             # Transaction failed, let's verify that
-#             # if not transaction_status:
-#             if not transaction_status and len(old_nodes) > 0:
+            transaction_status, old_nodes = system_storage.commit_and_unlock_nodes_multi(
+                [
+                    system_storage.generate_commit_node(
+                        self._parent_node,
+                        self._parent_lock_timestamp,
+                        set([NodeDataType.CHILDREN]),
+                    ),
+                ],
+                [
+                    system_storage.generate_delete_node(
+                        self.node, self.lock_timestamp, self.event_id
+                    ),
+                ],
+                return_old_on_failure=[self._parent_node, self._node],
+            )
+            # Transaction failed, let's verify that
+            # if not transaction_status:
+            if not transaction_status and len(old_nodes) > 0:
 
-#                 if self._node_status(old_nodes[1]) != TriBool.CORRECT:
-#                     logging.error("Failing to apply the update - couldn't commit")
-#                     return {
-#                         "status": "failure",
-#                         "path": self.node.path,
-#                         "reason": "update_not_committed",
-#                     }
+                if self._node_status(old_nodes[1]) != TriBool.CORRECT:
+                    logging.error("Failing to apply the update - couldn't commit")
+                    return {
+                        "status": "failure",
+                        "path": self.node.path,
+                        "reason": "update_not_committed",
+                    }
 
-#         # FIXME: update
-#         # FIXME: retain the node to keep counters
-#         # self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
-#         user_storage.delete(self.node)
-#         # self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
-#         user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
+        # FIXME: update
+        # FIXME: retain the node to keep counters
+        # self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
+        user_storage.delete(self.node)
+        # self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
+        user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
 
-#         system_storage.pop_pending_update(system_node.node)
+        system_storage.pop_pending_update(system_node.node)
 
-#         return {
-#             "status": "success",
-#             "path": self.node.path,
-#         }
+        return {
+            "status": "success",
+            "path": self.node.path,
+        }
 
-#     def epoch_counters(self) -> List[str]:
-#         # FIXME:
-#         return []
+    def epoch_counters(self) -> List[str]:
+        # FIXME:
+        return []
 
-#     def set_system_counter(self, system_counter: SystemCounter):
-#         # FIXME: parent counter
-#         pass
+    def set_system_counter(self, system_counter: SystemCounter):
+        # FIXME: parent counter
+        pass
 
-#     @property
-#     def node(self) -> Node:
-#         return self._node
+    @property
+    def node(self) -> Node:
+        return self._node
 
-#     @property
-#     def parent(self) -> Node:
-#         return self._parent_node
+    @property
+    def parent(self) -> Node:
+        return self._parent_node
 
-#     @property
-#     def type(self) -> DistributorEventType:
-#         return DistributorEventType.DELETE_NODE
+    @property
+    def type(self) -> DistributorEventType:
+        return DistributorEventType.DELETE_NODE
 
 
 def builder(counter: SystemCounter, event_type: DistributorEventType, event: dict, cloud_provider: CLOUD_PROVIDER = CLOUD_PROVIDER.AWS
@@ -648,8 +700,8 @@ def builder(counter: SystemCounter, event_type: DistributorEventType, event: dic
 
     ops: Dict[DistributorEventType, Type[DistributorEvent]] = {
         DistributorEventType.CREATE_NODE: DistributorCreateNode,
-        # DistributorEventType.SET_DATA: DistributorSetData,
-        # DistributorEventType.DELETE_NODE: DistributorDeleteNode,
+        DistributorEventType.SET_DATA: DistributorSetData,
+        DistributorEventType.DELETE_NODE: DistributorDeleteNode,
     }
 
     if event_type not in ops:

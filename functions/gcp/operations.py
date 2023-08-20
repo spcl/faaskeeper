@@ -24,8 +24,8 @@ from functions.gcp.config import Config
 from functions.gcp.control.channel import Client
 from functions.gcp.control.distributor_events import (
     DistributorCreateNode,
-    # DistributorDeleteNode,
-    # DistributorSetData,
+    DistributorSetData,
+    DistributorDeleteNode,
 )
 from functions.gcp.control.distributor_queue import DistributorQueue
 from functions.gcp.model import SystemStorage
@@ -41,7 +41,14 @@ class Executor(ABC):
     @property
     def event_id(self) -> str:
         return self._event_id
-
+    
+    @property
+    def attempt_limit(self) -> int:
+        '''
+        for fixing the number of attempts
+        '''
+        return 3
+    
     @abstractmethod
     def lock_and_read(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
         pass
@@ -119,6 +126,21 @@ class CreateNodeExecutor(Executor):
         # parent now has one child more
         self._parent_node.children.append(pathlib.Path(self.op.path).name)
         return (True, {})
+    
+    def distributor_push(self, client: Client, distributor_queue: DistributorQueue):
+        assert self._parent_node
+        assert self._parent_timestamp
+        self._counter = distributor_queue.push_and_count(
+            DistributorCreateNode(
+                self.event_id,
+                client.session_id,
+                self._timestamp,
+                self._parent_timestamp,
+                self._node,
+                self._parent_node,
+            ),
+            client,
+        )
 
     def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
         assert self._counter
@@ -154,23 +176,6 @@ class CreateNodeExecutor(Executor):
 
         return (True, {})
 
-    def distributor_push(self, client: Client, distributor_queue: DistributorQueue):
-
-        assert self._parent_node
-        assert self._parent_timestamp
-        self._counter = distributor_queue.push_and_count(
-            DistributorCreateNode(
-                self.event_id,
-                client.session_id,
-                self._timestamp,
-                self._parent_timestamp,
-                self._node,
-                self._parent_node,
-            ),
-            client,
-        )
-
-
 class DeregisterSessionExecutor(Executor):
     def __init__(self, event_id: str, op: DeregisterSession):
         super().__init__(event_id, op)
@@ -203,192 +208,206 @@ class DeregisterSessionExecutor(Executor):
                 },
             )
 
+class SetDataExecutor(Executor):
+    def __init__(self, event_id: str, op: RequestOperation):
+        super().__init__(event_id, op)
+        self._stats = TimingStatistics.instance()
+        self._begin = 0.0 # the whole execution
+        self._counter: Optional[SystemCounter] = None
 
-# class SetDataExecutor(Executor):
-#     def __init__(self, event_id: str, op: SetData):
-#         super().__init__(event_id, op)
-#         self._stats = TimingStatistics.instance()
-#         self._begin = 0.0
-#         self._counter: Optional[SystemCounter] = None
+    @property
+    def op(self) -> SetData:
+        return cast(SetData, self._op)
 
-#     @property
-#     def op(self) -> SetData:
-#         return cast(SetData, self._op)
+    def lock_and_read(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
 
-#     def lock_and_read(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
-#         path = self.op.path
-#         if self._config.benchmarking:
-#             self._begin = time.time()
-#         else:
-#             logging.debug(f"Attempting to write data at {path}")
-#         print(f"Attempting to write data at {path}")
-#         begin_lock = time.time()
-#         # FIXME :limit number of attempts
-#         while True:
-#             self._timestamp = int(datetime.now().timestamp())
-#             lock, self._system_node = system_storage.lock_node(path, self._timestamp)
-#             if not lock:
-#                 sleep(2)
-#             else:
-#                 break
-#         end_lock = time.time()
-#         if self._config.benchmarking:
-#             self._stats.add_result("lock", end_lock - begin_lock)
+        path = self.op.path
+        print(f"Attempting to write data on node at {path}")
+        
+        if self._config.benchmarking:
+            self._begin = time.time()
+        
+        begin_lock = time.time()
+        while True:
+            self._timestamp = int(datetime.now().timestamp())
+            lock, self._node = system_storage.lock_node(path, self._timestamp)
+            if not lock:
+                sleep(2)
+            else:
+                break
+        end_lock = time.time()
+        if self._config.benchmarking:
+            self._stats.add_result("lock", end_lock - begin_lock)
+        
+        if self._node is None:
+            system_storage.unlock_node(path, self._timestamp)
+            return (False, {
+                {"status": "failure", "path": path, "reason": "node_doesnt_exist"},
+            })
+        
+        verInReq = int(self.op._version)
+        if verInReq != -1 and self._node.modified.system._version[0] != verInReq:
+            print(self._node.modified.system._version[0], type(self._node.modified.system._version[0]), self.op._version, type(self.op._version), verInReq, type(verInReq))
+            system_storage.unlock_node(path, self._timestamp)
+            return (False, {"status": "failure", "path": path, "reason": "version_doesnt_match"})
+            
+        self._node.data_b64 = self.op.data_b64
+        return (True, {})
+    
+    def distributor_push(self, client: Client, distributor_queue: DistributorQueue):
+        assert self._node
+        assert self._timestamp
+        
+        begin_push = time.time()
+        # FIXME: funct in distributorSetData like serialization&deserialization
+        self._counter = distributor_queue.push_and_count(
+            DistributorSetData(self.event_id, client.session_id, self._timestamp, self._node),
+            client
+        )
+        end_push = time.time()
+        if self._config.benchmarking:
+            self._stats.add_result("push", end_push - begin_push)
 
-#         # does the node exist?
-#         if self._system_node is None:
-#             system_storage.unlock_node(path, self._timestamp)
-#             return (
-#                 False,
-#                 {"status": "failure", "path": path, "reason": "node_doesnt_exist"},
-#             )
+    def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
+        assert self._node
+        assert self._timestamp
+        assert self._counter
 
-#         self._system_node.data_b64 = self.op.data_b64
-#         return (True, {})
+        begin_commit = time.time()
+        self._node.modified = Version(self._counter, None)
 
-#     def distributor_push(self, client: Client, distributor_queue: DistributorQueue):
+        # we do not care about return bool because 
+        # # If we fail, we do not notify the user - it is now the job of the distributor.
+        # FIXME: why?
+        system_storage.commit_and_unlock_node(
+            self._node,
+            self._timestamp,
+            set([NodeDataType.MODIFIED]),
+            self.event_id
+        )
 
-#         assert self._system_node
+        end_commit = time.time()
+        if self._config.benchmarking:
+            self._stats.add_result("commit", end_commit - begin_commit)
 
-#         begin_push = time.time()
-#         self._counter = distributor_queue.push_and_count(
-#             DistributorSetData(
-#                 self.event_id, client.session_id, self._timestamp, self._system_node
-#             ),
-#             client,
-#         )
-#         end_push = time.time()
-#         if self._config.benchmarking:
-#             self._stats.add_result("push", end_push - begin_push)
+        if self._config.benchmarking:
+            end = time.time()
+            self._stats.add_result("total", end - self._begin)
+            self._stats.add_repetition()
 
-#     def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
-
-#         assert self._system_node
-#         assert self._counter
-
-#         begin_commit = time.time()
-#         # store only the modified version counter
-#         # the new data will be written by the distributor
-#         self._system_node.modified = Version(self._counter, None)
-#         # if not system_storage.commit_node(
-#         #    self._system_node,
-#         #    self._timestamp,
-#         #    set([NodeDataType.MODIFIED]),
-#         #    self.event_id,
-#         # ):
-#         #    return (False, {"status": "failure", "reason": "unknown"})
-#         system_storage.commit_node(
-#             self._system_node,
-#             self._timestamp,
-#             set([NodeDataType.MODIFIED]),
-#             self.event_id,
-#         )
-#         end_commit = time.time()
-#         if self._config.benchmarking:
-#             self._stats.add_result("commit", end_commit - begin_commit)
-
-#         if self._config.benchmarking:
-#             end = time.time()
-#             self._stats.add_result("total", end - self._begin)
-#             self._stats.add_repetition()
-
-#         return (True, {})
+        return (True, {})
 
 
-# class DeleteNodeExecutor(Executor):
-#     def __init__(self, event_id: str, op: DeleteNode):
-#         super().__init__(event_id, op)
+class DeleteNodeExecutor(Executor):
+    def __init__(self, event_id: str, op: DeleteNode):
+        super().__init__(event_id, op)
+        self._begin = 0.0 # the whole execution
 
-#     @property
-#     def op(self) -> DeleteNode:
-#         return cast(DeleteNode, self._op)
+    @property
+    def op(self) -> DeleteNode:
+        return cast(DeleteNode, self._op)
+    
+    def lock_and_read(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
+        path = self.op.path
+        print(f"Attempting to delete node at {path}")
 
-#     def lock_and_read(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
+        if self._config.benchmarking:
+            self._begin = time.time()
+        
+        while True:
+            self._timestamp = int(datetime.now().timestamp())
+            lock, self._node = system_storage.lock_node(path, self._timestamp)
+            if not lock:
+                sleep(2)
+            else:
+                break
 
-#         path = self.op.path
-#         logging.info(f"Attempting to delete node at {path}")
+        if self._node is None:
+            system_storage.unlock_node(path, self._timestamp)
+            return (False, {
+                {"status": "failure", "path": path, "reason": "node_doesnt_exist"},
+            })
+        verInReq = int(self.op._version)
+        if verInReq != -1 and self._node.modified.system._version[0] != verInReq:
+            system_storage.unlock_node(path, self._timestamp)
+            return (False, {"status": "failure", "path": path, "reason": "version_doesnt_match"})
 
-#         # FIXME :limit number of attempts
-#         while True:
-#             self._timestamp = int(datetime.now().timestamp())
-#             lock, self._node = system_storage.lock_node(path, self._timestamp)
-#             if not lock:
-#                 sleep(2)
-#             else:
-#                 break
+        if len(self._node.children) != 0:
+            system_storage.unlock_node(path, self._timestamp)
+            return (False, {"status": "failure", "path": path, "reason": "not_empty"})
 
-#         # does the node not exist?
-#         if self._node is None:
-#             system_storage.unlock_node(path, self._timestamp)
-#             return (
-#                 False,
-#                 {"status": "failure", "path": path, "reason": "node_doesnt_exist"},
-#             )
+        # lock the parent - unless we're already at the root
+        node_path = pathlib.Path(path)
+        parent_path = node_path.parent.absolute()
+        self._parent_timestamp: Optional[int] = None
+        while True:
+            self._parent_timestamp = int(datetime.now().timestamp())
+            parent_lock, self._parent_node = system_storage.lock_node(
+                str(parent_path), self._parent_timestamp
+            )
+            if not parent_lock:
+                sleep(2)
+            else:
+                break
 
-#         if len(self._node.children):
-#             system_storage.unlock_node(path, self._timestamp)
-#             return (False, {"status": "failure", "path": path, "reason": "not_empty"})
+        if self._parent_node is None:
+            system_storage.unlock_node(str(parent_path), self._parent_timestamp)
+            system_storage.unlock_node(path, self._timestamp)
+            return (
+                False,
+                {
+                    "status": "failure",
+                    "path": str(parent_path),
+                    "reason": "node_doesnt_exist",
+                },
+            )
 
-#         # lock the parent - unless we're already at the root
-#         node_path = pathlib.Path(path)
-#         parent_path = node_path.parent.absolute()
-#         self._parent_timestamp: Optional[int] = None
-#         while True:
-#             self._parent_timestamp = int(datetime.now().timestamp())
-#             parent_lock, self._parent_node = system_storage.lock_node(
-#                 str(parent_path), self._parent_timestamp
-#             )
-#             if not parent_lock:
-#                 sleep(2)
-#             else:
-#                 break
-#         assert self._parent_node
+        self._parent_node.children.remove(pathlib.Path(self.op.path).name)
 
-#         # remove child from parent node
-#         self._parent_node.children.remove(pathlib.Path(self.op.path).name)
+        return (True, {})
 
-#         return (True, {})
+    def distributor_push(self, client: Client, distributor_queue: DistributorQueue):
 
-#     def distributor_push(self, client: Client, distributor_queue: DistributorQueue):
+        assert self._node
+        assert self._parent_node
+        assert self._parent_timestamp
 
-#         assert self._node
-#         assert self._parent_node
-#         assert self._parent_timestamp
+        assert distributor_queue
+        distributor_queue.push_and_count(
+            DistributorDeleteNode(
+                self.event_id,
+                client.session_id,
+                self._timestamp,
+                self._parent_timestamp,
+                self._node,
+                self._parent_node,
+            ),
+            client,
+        )
 
-#         assert distributor_queue
-#         distributor_queue.push_and_count(
-#             DistributorDeleteNode(
-#                 self.event_id,
-#                 client.session_id,
-#                 self._timestamp,
-#                 self._parent_timestamp,
-#                 self._node,
-#                 self._parent_node,
-#             ),
-#             client,
-#         )
+    def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
 
-#     def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
+        assert self._node
+        assert self._timestamp
+        assert self._parent_node
+        assert self._parent_timestamp
 
-#         assert self._node
-#         assert self._timestamp
-#         assert self._parent_node
-#         assert self._parent_timestamp
+        system_storage.commit_and_unlock_nodes_multi(
+            [
+                system_storage.generate_commit_node(
+                    self._parent_node,
+                    self._parent_timestamp,
+                    set([NodeDataType.CHILDREN]),
+                ),
+            ],
+            [
+                system_storage.generate_delete_node(
+                    self._node, self._timestamp, self.event_id
+                ),
+            ]
+        )
 
-#         system_storage.commit_nodes(
-#             [
-#                 system_storage.generate_commit_node(
-#                     self._parent_node,
-#                     self._parent_timestamp,
-#                     set([NodeDataType.CHILDREN]),
-#                 ),
-#                 system_storage.generate_delete_node(
-#                     self._node, self._timestamp, self.event_id
-#                 ),
-#             ]
-#         )
-
-#         return (True, {})
+        return (True, {})
 
 
 def builder(
@@ -397,8 +416,8 @@ def builder(
 
     ops: Dict[str, Tuple[Type[RequestOperation], Type[Executor]]] = {
         "create_node": (CreateNode, CreateNodeExecutor),
-        # "set_data": (SetData, SetDataExecutor),
-        # "delete_node": (DeleteNode, DeleteNodeExecutor),
+        "set_data": (SetData, SetDataExecutor),
+        "delete_node": (DeleteNode, DeleteNodeExecutor),
         "deregister_session": (DeregisterSession, DeregisterSessionExecutor),
     }
 
