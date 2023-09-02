@@ -4,11 +4,11 @@ import json
 import time
 
 from typing import Dict, List, Set
-from concurrent.futures import Future
+from concurrent.futures import Future, ThreadPoolExecutor
 
 from functions.gcp.control.distributor_events import DistributorEventType, builder
 from faaskeeper.version import SystemCounter
-from faaskeeper.watch import WatchType
+from faaskeeper.watch import WatchType, WatchEventType
 from functions.gcp.control.channel import Client
 from functions.gcp.stats import TimingStatistics
 from functions.gcp.config import Config
@@ -27,6 +27,11 @@ for r in regions:
     epoch_counters[r] = set()
 
 timing_stats = TimingStatistics.instance()
+
+executor = ThreadPoolExecutor(max_workers=2 * len(regions))
+
+def launch_watcher(region: str, json_in: dict):
+    pass
 
 # Register an HTTP function with the Functions Framework
 # on GCP, it is named main.py
@@ -51,11 +56,9 @@ def handler(request):
     try:
         client = Client.deserialize(write_event)
         print('distributor |', client)
-    #     # operation = builder(counter, event_type, write_event)
         operation = builder(counter, event_type, write_event, CLOUD_PROVIDER.GCP)
         print('distributor |', operation)
         begin_write = time.time()
-        # time.sleep(0.08)
         # write new data
         for r in regions: # we do not consider regions for now, because
             ret = operation.execute(
@@ -64,43 +67,48 @@ def handler(request):
         end_write = time.time()
         timing_stats.add_result("write", end_write - begin_write)
 
-    #     # # start watch delivery
-    #     # for r in regions:
-    #     #     # if event_type == DistributorEventType.SET_DATA:
-    #     #     #    watches_submitters.append(
-    #     #     #        executor.submit(launch_watcher, r, watches)
-    #     #     #    )
-    #     #     # FIXME: other watchers
-    #     #     # FIXME: reenable submission
-    #     #     # Query watches from DynaamoDB to decide later
-    #     #     # if they should even be scheduled.
-    #     #     region_watches[r].query_watches(operation.node.path, [WatchType.GET_DATA])
+        # start watch delivery
+        for r in regions:
+            if event_type == DistributorEventType.SET_DATA:
+                watches = {
+                    "watch-event": WatchEventType.NODE_DATA_CHANGED.value, 
+                    "path":operation.node.path,
+                    "timestamp": operation.node.modified.system.sum # modified timestamp
+                }
+                watches_submitters.append(
+                   executor.submit(launch_watcher, r, watches)
+                )
+            # FIXME: other watchers
+            # FIXME: reenable submission
+            # Query watches from DynaamoDB to decide later
+            # if they should even be scheduled.
+            region_watches[r].query_watches(operation.node.path, [WatchType.GET_DATA])
         
-    #     # for r in regions: # we do not consider regions for now
-    #     #     epoch_counters[r].update(operation.epoch_counters())
+        for r in regions: # we do not consider regions for now
+            epoch_counters[r].update(operation.epoch_counters())
 
-    #     if ret:
-    #         # notify client about success
-    #         config.client_channel.notify(
-    #             client,
-    #             ret,
-    #         )
-    #         processed_events += 1
-    #     else:
-    #         config.client_channel.notify(
-    #             client,
-    #             {"status": "failure", "reason": "distributor failure"},
-    #         )
+        if ret:
+            # notify client about success
+            config.client_channel.notify(
+                client,
+                ret,
+            )
+            # processed_events += 1
+        else:
+            config.client_channel.notify(
+                client,
+                {"status": "failure", "reason": "distributor failure"},
+            )
 
     except Exception:
         print("Failure!")
         import traceback
 
         traceback.print_exc()
-        # config.client_channel.notify(
-        #     client,
-        #     {"status": "failure", "reason": "distributor failure"},
-        # )
+        config.client_channel.notify(
+            client,
+            {"status": "failure", "reason": "distributor failure"},
+        )
     for f in watches_submitters:
         f.result()
 

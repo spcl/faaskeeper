@@ -439,7 +439,7 @@ class DistributorSetData(DistributorEvent):
 
             logging.error("Failing to apply the update - node still locked")
 
-            commit_status = system_storage.commit_node(
+            commit_status = system_storage.commit_and_unlock_node(
                 self.node,
                 self.lock_timestamp,
                 set([NodeDataType.MODIFIED]),
