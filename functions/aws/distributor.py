@@ -75,7 +75,7 @@ def launch_watcher(operation: DistributorEvent, region: str, json_in: dict):
         
         # pop the pending watch: update epoch counters for the node and parent in user storage.
         epoch_counters[r].remove(f"{hashed_path}_{watch_type}_{timestamp}")
-        operation.update_epoch_counters(config.user_storage, epoch_counters[r]) # 结合client那边，或许应该要放到其他地方
+        operation.update_epoch_counters(config.user_storage, epoch_counters[r])
         return True
     return False
 
