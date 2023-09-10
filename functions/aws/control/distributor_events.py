@@ -10,9 +10,9 @@ from boto3.dynamodb.types import TypeDeserializer
 
 from faaskeeper.node import Node, NodeDataType
 from faaskeeper.version import EpochCounter, SystemCounter, Version
-from faaskeeper.watch import WatchEventType
+from faaskeeper.watch import WatchEventType, WatchType
 from functions.aws.model import SystemStorage
-from functions.aws.model.watches import Watches, WatchType
+from functions.aws.model.watches import Watches 
 from functions.aws.model.system_storage import Node as SystemNode
 from functions.aws.model.user_storage import Storage as UserStorage
 from functions.aws.stats import TimingStatistics
