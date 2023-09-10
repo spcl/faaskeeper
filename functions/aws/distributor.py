@@ -116,7 +116,7 @@ def handler(event: dict, context):
             elif "body" in record:
                 write_event = json.loads(record["body"])
                 event_type = DistributorEventType(int(write_event["type"]["N"]))
-                if "data" in record["messageAttributes"]: # TODO: is this a case from other operation
+                if "data" in record["messageAttributes"]:
                     write_event["data"] = {
                         "B": record["messageAttributes"]["data"]["binaryValue"]
                     }
