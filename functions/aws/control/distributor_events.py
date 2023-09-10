@@ -293,7 +293,7 @@ class DistributorCreateNode(DistributorEvent):
                 all_watches[idx] = Watches.Watch_Event(WatchEventType.NODE_CHILDREN_CHANGED.value, watch_entity[0].value, watch_entity[1], self.parent.modified.system.sum)
         return all_watches
 
-    def store_epoch_counters(self, user_storage: UserStorage, epoch_counters: Set[str]):
+    def update_epoch_counters(self, user_storage: UserStorage, epoch_counters: Set[str]):
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.node)
         # FIXME: update pxid.
@@ -477,7 +477,7 @@ class DistributorSetData(DistributorEvent):
 
         return all_watches
 
-    def store_epoch_counters(self, user_storage: UserStorage, epoch_counters: Set[str]):
+    def update_epoch_counters(self, user_storage: UserStorage, epoch_counters: Set[str]):
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.node, set([NodeDataType.MODIFIED, NodeDataType.DATA]))
 
@@ -650,7 +650,7 @@ class DistributorDeleteNode(DistributorEvent):
 
         return all_watches
     
-    def store_epoch_counters(self, user_storage: UserStorage, epoch_counters: Set[str]):
+    def update_epoch_counters(self, user_storage: UserStorage, epoch_counters: Set[str]):
         self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
 
