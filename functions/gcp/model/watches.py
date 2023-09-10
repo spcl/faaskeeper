@@ -5,8 +5,12 @@ from boto3.dynamodb.types import TypeDeserializer
 from faaskeeper.watch import WatchType
 from functions.gcp.control.datastore import DataStoreStorage
 
+from collections import namedtuple
 
 class Watches:
+
+    Watch_Event = namedtuple("Watch_Event", ["watch_event_type", "watch_type", "node_path", "mFxidSys"])
+
     def __init__(self, storage_name: str, region: str):
         self._storage = DataStoreStorage(f"{storage_name}-watch", "path")
         self._region = region

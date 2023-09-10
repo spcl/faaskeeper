@@ -27,7 +27,7 @@ class DistributorQueuePubSub(DistributorQueue):
         project_id is not necessary to set if you have GOOGLE_APPLICATION_CREDENTIALS configured
         '''
         batch_settings = pubsub_v1.types.BatchSettings(
-            max_messages=1,  # default 100, now I disable batching
+            max_messages=10,  # default 100, now I disable batching
             max_bytes= 1 * 1000 * 1000,  # default 1 MB, still 1 MB
             max_latency=1,  # default 10 ms, now is 1s
         )
@@ -67,7 +67,6 @@ class DistributorQueuePubSub(DistributorQueue):
         # publish a message
         # we need some way to serialize the DistributorEvent and client
         client_serialization = client.serialize()
-        #  + int(client.session_id, 16)
         sequence_timestamp = int(datetime.now().timestamp() * 1000000)
         payload: Dict[str, str] = {
             **client_serialization,

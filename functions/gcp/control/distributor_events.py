@@ -21,10 +21,7 @@ from functions.gcp.model.system_storage import SystemStateStorage
 from functions.gcp.model.system_storage import NodeWithLock as SystemNodeWithLock
 from functions.gcp.model.user_storage import Storage as UserStorage
 from functions.gcp.stats import TimingStatistics
-
-#TODO: there is the original one in faaskeeper client config, should open a PR in that repo to add GCP and AZURE
-# for now we put it under function
-
+from functions.gcp.model.watches import Watches
 
 class DistributorEventType(IntEnum):
     CREATE_NODE = 0
@@ -101,6 +98,20 @@ class DistributorEvent(ABC):
 
     @abstractmethod
     def set_system_counter(self, system_counter: SystemCounter):
+        pass
+
+    @abstractmethod
+    def generate_watches_event(self, region_watches: Watches) -> List[Watches.Watch_Event]:
+        '''
+        [watchType, path, watchDetails, node_timestamp]
+        '''
+        pass
+
+    @abstractmethod
+    def update_epoch_counters(self, user_storage: UserStorage, epoch_counters: Set[str]):
+        '''
+        store the epoch counters to the EXISTING node (and parent node) in the user storage.
+        '''
         pass
 
 
@@ -238,14 +249,9 @@ class DistributorCreateNode(DistributorEvent):
     ) -> Optional[dict]:
 
         system_node = system_storage.read_node(self.node)
-
-        print("distributor system node", system_node)
         status = self._node_status(system_node)
 
         # FIXME: parent counter
-
-        print("distributor_event |",self.node.created.system.serialize()) # this is in raw format
-        print("distributor_event |",system_node.pending_updates, self.event_id, status)
         if status == TriBool.INCORRECT:
             logging.error("Failing to apply the update - node updated by someone else")
             return {
@@ -278,7 +284,6 @@ class DistributorCreateNode(DistributorEvent):
                 ],
                 return_old_on_failure=[self._node, self._parent_node],
             )
-            print("still locked, still try", transaction_status)
             # Transaction failed, let's verify that
             if not transaction_status and len(old_nodes) > 0:
 
@@ -292,8 +297,8 @@ class DistributorCreateNode(DistributorEvent):
 
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.write(self.node)
-        # FIXME: update parent epoch and pxid
-        # self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
+        # FIXME: update parent pxid
+        self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
 
         system_storage.pop_pending_update(system_node.node)
@@ -309,9 +314,12 @@ class DistributorCreateNode(DistributorEvent):
         return []
 
     def set_system_counter(self, system_counter: SystemCounter):
-        # FIXME: parent counter
         self.node.created = Version(system_counter, None)
         self.node.modified = Version(system_counter, None)
+
+        self.parent.modified = Version(system_counter, None)
+
+    
 
     @property
     def node(self) -> Node:
