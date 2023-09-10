@@ -15,7 +15,7 @@ from boto3.dynamodb.types import TypeDeserializer
 
 from faaskeeper.node import Node, NodeDataType
 from faaskeeper.version import EpochCounter, SystemCounter, Version
-from faaskeeper.watch import WatchEventType
+from faaskeeper.watch import WatchEventType, WatchType
 from functions.cloud_providers import CLOUD_PROVIDER
 from functions.gcp.model.system_storage import SystemStateStorage
 from functions.gcp.model.system_storage import NodeWithLock as SystemNodeWithLock
@@ -319,6 +319,34 @@ class DistributorCreateNode(DistributorEvent):
 
         self.parent.modified = Version(system_counter, None)
 
+    def generate_watches_event(self, region_watches: Watches) -> List[Watches.Watch_Event]:
+        # Query watches from DynaamoDB to decide later, if we should actually invoke call function, then we abstract if statement
+
+        # if they should even be scheduled.
+        all_watches = []
+
+        all_watches += region_watches.query_watches(
+            self.node.path, [WatchType.EXISTS]
+        )
+
+        all_watches += region_watches.query_watches(
+            self.parent.path, [WatchType.GET_CHILDREN]
+        )
+
+        for idx, watch_entity in enumerate(all_watches):
+            # assign node or parent node timestamp to the results
+            if watch_entity[1] == self.node.path:
+                all_watches[idx] = Watches.Watch_Event(WatchEventType.NODE_CREATED.value, watch_entity[0].value, watch_entity[1], self.node.modified.system.sum)
+            elif watch_entity[1] == self.parent.path:
+                all_watches[idx] = Watches.Watch_Event(WatchEventType.NODE_CHILDREN_CHANGED.value, watch_entity[0].value, watch_entity[1], self.parent.modified.system.sum)
+        return all_watches
+
+    def update_epoch_counters(self, user_storage: UserStorage, epoch_counters: Set[str]):
+        self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
+        user_storage.update(self.node)
+        # FIXME: update pxid.
+        self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
+        user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
     
 
     @property
