@@ -33,8 +33,14 @@ class DataStoreStorage(Storage):
     def update(self):
         pass
 
-    def read(self):
-        pass
+    def read(self, path: str):
+        # a read w/o using TXN
+        # access the key in the return value using node_info.key
+        assert self.client is not None
+        node_key = self.client.key(self.storage_name, path)
+        node_info = self.client.get(node_key)
+
+        return node_info
 
     def delete(self):
         pass

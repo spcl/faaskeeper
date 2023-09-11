@@ -309,7 +309,6 @@ class DeleteNodeExecutor(Executor):
     
     def lock_and_read(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
         path = self.op.path
-        print(f"Attempting to delete node at {path}")
 
         if self._config.benchmarking:
             self._begin = time.time()

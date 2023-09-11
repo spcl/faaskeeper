@@ -545,7 +545,21 @@ class DistributorSetData(DistributorEvent):
     def set_system_counter(self, system_counter: SystemCounter):
 
         self.node.modified = Version(system_counter, None)
+    
+    def generate_watches_event(self, region_watches: Watches) -> List[Watches.Watch_Event]:
+        all_watches = []
+        all_watches += region_watches.query_watches(
+            self.node.path, [WatchType.GET_DATA, WatchType.EXISTS]
+        )
 
+        for idx, watch_entity in enumerate(all_watches):
+            all_watches[idx] = Watches.Watch_Event(WatchEventType.NODE_DATA_CHANGED.value, watch_entity[0].value, watch_entity[1], self.node.modified.system.sum)
+
+        return all_watches
+
+    def update_epoch_counters(self, user_storage: UserStorage, epoch_counters: Set[str]):
+        self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
+        user_storage.update(self.node, set([NodeDataType.MODIFIED, NodeDataType.DATA]))
 
 class DistributorDeleteNode(DistributorEvent):
 
@@ -697,7 +711,7 @@ class DistributorDeleteNode(DistributorEvent):
         # FIXME: retain the node to keep counters
         # self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.delete(self.node)
-        # self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
+        self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
 
         system_storage.pop_pending_update(system_node.node)
@@ -712,8 +726,33 @@ class DistributorDeleteNode(DistributorEvent):
         return []
 
     def set_system_counter(self, system_counter: SystemCounter):
-        # FIXME: parent counter
-        pass
+        self.node.modified = Version(system_counter, None) # this is for notification use, have nothing to do w/ the node commit
+        self.parent.modified = Version(system_counter, None)
+    
+    def generate_watches_event(self, region_watches: Watches) -> List[Watches.Watch_Event]:
+        # Query watches from DynaamoDB to decide later, if we should actually invoke call function, then we abstract if statement
+
+        # if they should even be scheduled.
+        all_watches = []
+        all_watches += region_watches.query_watches(
+            self.node.path, [WatchType.EXISTS, WatchType.GET_DATA, WatchType.GET_CHILDREN]
+        )
+
+        all_watches += region_watches.query_watches(
+            self.parent.path, [WatchType.GET_CHILDREN]
+        )
+
+        for idx, watch_entity in enumerate(all_watches):
+            if watch_entity[1] == self.node.path:
+                all_watches[idx] = Watches.Watch_Event(WatchEventType.NODE_DELETED.value, watch_entity[0].value, watch_entity[1], self.node.modified.system.sum)
+            elif watch_entity[1] == self.parent.path:
+                all_watches[idx] = Watches.Watch_Event(WatchEventType.NODE_CHILDREN_CHANGED.value, watch_entity[0].value, watch_entity[1], self.parent.modified.system.sum)
+
+        return all_watches
+
+    def update_epoch_counters(self, user_storage: UserStorage, epoch_counters: Set[str]):
+        self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
+        user_storage.update(self.parent, set([NodeDataType.CHILDREN]))
 
     @property
     def node(self) -> Node:
@@ -744,7 +783,7 @@ def builder(counter: SystemCounter, event_type: DistributorEventType, event: dic
         raise NotImplementedError()
 
     distr_event = ops[event_type]
-    op = distr_event.deserialize(event, cloud_provider)
+    op:DistributorEvent = distr_event.deserialize(event, cloud_provider)
     op.set_system_counter(counter)
 
     return op

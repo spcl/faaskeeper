@@ -1,7 +1,5 @@
 from typing import List
 
-from boto3.dynamodb.types import TypeDeserializer
-
 from faaskeeper.watch import WatchType
 from functions.gcp.control.datastore import DataStoreStorage
 
@@ -14,7 +12,6 @@ class Watches:
     def __init__(self, storage_name: str, region: str):
         self._storage = DataStoreStorage(f"{storage_name}-watch", "path")
         self._region = region
-        self._type_deserializer = TypeDeserializer()
         self._counters = {
             WatchType.GET_DATA: "getData",
             WatchType.EXISTS: "createNode",
@@ -22,57 +19,50 @@ class Watches:
         }
 
     def query_watches(self, node_path: str, counters: List[WatchType]):
+        # FIXME: Should be put into a control driver.
         try:
 
-            ret = self._storage.read(node_path)
+            ret, _ = self._storage.read(node_path)
 
             data = []
-            if "Attributes" in ret:
+            if ret != None:
                 for c in counters:
-                    data.append(
-                        (
-                            c,
-                            self._type_deserializer.deserialize(
-                                ret["Attributes"][self._counters.get(c)]
-                            ),
+                    if self._counters.get(c) in ret:
+                        data.append(
+                            (
+                                c,
+                                node_path,
+                                ret[self._counters.get(c)],
+                            )
                         )
-                    )
             return data
         except self._storage.errorSupplier.ResourceNotFoundException:
             return []
 
     def get_watches(self, node_path: str, counters: List[WatchType]):
+        # FIXME: Should be put into a control driver.
+        local_client = self._storage.client
         try:
-            # we always commit the modified stamp
-            update_expr = "REMOVE "
-            for c in counters:
-                update_expr = f"{update_expr} {self._counters.get(c)},"
-            update_expr = update_expr[:-1]
+            with local_client.transaction():
+                node_info = self._storage.read(node_path)
+                old_info = node_info
 
-            ret = self._storage._dynamodb.update_item(
-                TableName=self._storage.storage_name,
-                # path to the node
-                Key={"path": {"S": node_path}},
-                # create timelock
-                UpdateExpression=update_expr,
-                ReturnValues="UPDATED_OLD",
-                ReturnConsumedCapacity="TOTAL",
-            )
-            # for c in self._counters:
-            #    if c in ret["Item"]:
-            #        counters.append(self._type_deserializer.deserialize(ret["Item"][c]))
-
-            data = []
-            if "Attributes" in ret:
                 for c in counters:
-                    data.append(
-                        (
-                            c,
-                            self._type_deserializer.deserialize(
-                                ret["Attributes"][self._counters.get(c)]  # type: ignore
-                            ),
+                    watch_type_str = self._counters.get(c)
+                    if watch_type_str in old_info:
+                        del old_info[watch_type_str]
+                
+                local_client.put(old_info)
+
+                data = []
+                if old_info != None:
+                    for c in counters:
+                        data.append(
+                            (
+                                c,
+                                old_info[self._counters.get(c)],  # type: ignore
+                            )
                         )
-                    )
-            return data
+                return data
         except self._storage.errorSupplier.ResourceNotFoundException:
             return []

@@ -128,20 +128,19 @@ class DataStoreSystemStateStorage(SystemStateStorage):
 
     def lock_node(self, path: str, timestamp: int) -> Tuple[bool, Node]:
         # why we monve this one to control driver? like we can call self._state_storage.lock_node()?
+        # because this is a model class abstract away the cloud details. FIXME: move this to the interface of control driver
         # in AWS, there is a try block catching conditioncheckfailedException, here we will do it in a TXN 
         local_client = self._state_storage.client
         assert local_client is not None
         try:
             with local_client.transaction():
-                key = local_client.key(self._state_storage.storage_name, path)
-                node_info = local_client.get(key)
+                node_info = self._state_storage.read(path)
                 print("system_storage | lock_node", node_info)
                 if node_info == None:
                     # node does not exist, therefore we upsert here, same with AWS: TODO: do we want that?
                     # note that if a node does NOT exist,
                     # the datastore only has (path, timelock)
-                    print("system_storage | node not exist, start to lock")
-                    node = datastore.Entity(key)
+                    node = datastore.Entity(node_info.key)
 
                     node.update({
                         "timelock": timestamp
@@ -213,8 +212,7 @@ class DataStoreSystemStateStorage(SystemStateStorage):
 
         try:
             with local_client.transaction():
-                key = local_client.key(self._state_storage.storage_name, path)
-                node_info = local_client.get(key)
+                node_info = self._state_storage.read(path)
                 print("system_storage | unlock_node before deletion", node_info)
 
                 if "timelock" in node_info and node_info["timelock"] == lock_timestamp:
@@ -239,8 +237,7 @@ class DataStoreSystemStateStorage(SystemStateStorage):
         
         try:
             with local_client.transaction():
-                key = local_client.key(self._state_storage.storage_name, node.path)
-                node_info = local_client.get(key)
+                node_info = self._state_storage.read(node.path)
 
                 if node_info is not None:
                     to_commit = self.generate_commit_node(node, timestamp, updates, update_event_id)
@@ -394,11 +391,7 @@ class DataStoreSystemStateStorage(SystemStateStorage):
         return ret
     
     def read_node(self, node: Node) -> NodeWithLock:
-        local_client = self._state_storage.client
-        assert local_client is not None
-
-        key = local_client.key(self._state_storage.storage_name, node.path)
-        res = local_client.get(key)
+        res = self._state_storage.read(node.path)
         StorageStatistics.instance().add_read_units(1)
         
         return self._parse_node(node, res)
@@ -451,8 +444,7 @@ class DataStoreSystemStateStorage(SystemStateStorage):
         assert local_client is not None
         try:
             with local_client.transaction():
-                key = local_client.key(self._state_storage.storage_name, node.path)
-                node_info = local_client.get(key)
+                node_info = self._state_storage.read(node.path)
                 print("system_storage | pop pending updates", node_info)
                 if node_info == None:
                     return None
