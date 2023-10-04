@@ -10,7 +10,7 @@ class Watches:
     Watch_Event = namedtuple("Watch_Event", ["watch_event_type", "watch_type", "node_path", "mFxidSys"])
 
     def __init__(self, storage_name: str, region: str):
-        self._storage = DataStoreStorage(f"{storage_name}-watch", "path")
+        self._storage = DataStoreStorage(f"{storage_name}-watch")
         self._region = region
         self._counters = {
             WatchType.GET_DATA: "getData",
@@ -19,7 +19,6 @@ class Watches:
         }
 
     def query_watches(self, node_path: str, counters: List[WatchType]):
-        # FIXME: Should be put into a control driver.
         try:
 
             ret, _ = self._storage.read(node_path)
@@ -40,7 +39,6 @@ class Watches:
             return []
 
     def get_watches(self, node_path: str, counters: List[WatchType]):
-        # FIXME: Should be put into a control driver.
         local_client = self._storage.client
         try:
             with local_client.transaction():

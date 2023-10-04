@@ -11,16 +11,12 @@ from functions.gcp.control.datastore import DataStoreStorage as DataStoreDriver
 
 from google.cloud import datastore
 
-
-# We need a wrapper class for Node because we need to wrap node with lock
-# should we move this class into a more general interface?
-
+# FIXME: should we move this class into a more general interface?
 class NodeWithLock:
     class Status(Enum):
         EXISTS = 0
         NOT_EXISTS = 1
 
-    # now we can init a class called 'Lock' with an arg timestamp = xxx
     Lock = namedtuple("Lock", ["timestamp"])
     
     def __init__(self, node: Node, status: Status):

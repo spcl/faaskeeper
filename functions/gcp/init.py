@@ -12,7 +12,7 @@ def init(service_name: str, region: str):
     
     # clean up system state table
     datastore_client = datastore.Client()
-    kind_name = "faaskeeper-dev-state"
+    kind_name = f"{service_name}-state"
     # # initialize root
     with datastore_client.transaction():
         root_node = datastore.Entity(datastore_client.key(kind_name, "/"))

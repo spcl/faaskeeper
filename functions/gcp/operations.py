@@ -130,7 +130,8 @@ class CreateNodeExecutor(Executor):
     def distributor_push(self, client: Client, distributor_queue: DistributorQueue):
         assert self._parent_node
         assert self._parent_timestamp
-        self._counter = distributor_queue.push_and_count(
+
+        distributor_queue.push_and_count(
             DistributorCreateNode(
                 self.event_id,
                 client.session_id,
@@ -259,8 +260,7 @@ class SetDataExecutor(Executor):
         assert self._timestamp
         
         begin_push = time.time()
-        # FIXME: funct in distributorSetData like serialization&deserialization
-        self._counter = distributor_queue.push_and_count(
+        distributor_queue.push_and_count(
             DistributorSetData(self.event_id, client.session_id, self._timestamp, self._node),
             client
         )
@@ -276,9 +276,6 @@ class SetDataExecutor(Executor):
         begin_commit = time.time()
         self._node.modified = Version(self._counter, None)
 
-        # we do not care about return bool because 
-        # # If we fail, we do not notify the user - it is now the job of the distributor.
-        # FIXME: why?
         system_storage.commit_and_unlock_node(
             self._node,
             self._timestamp,

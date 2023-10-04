@@ -2,7 +2,7 @@ import os
 import functions_framework
 
 from faaskeeper.watch import WatchEventType, WatchType
-from functions.aws.model.watches import Watches
+from functions.gcp.model.watches import Watches
 from functions.aws.notify import notify
 
 verbose = bool(os.environ["VERBOSE"])

@@ -12,16 +12,11 @@ class Storage(Enum):
     KEY_VALUE = 1
     REDIS = 2
 
-
 class QueueType(Enum):
-    PUBSUB = 1
-    # DYNAMODB = 0
-    # SQS = 1
-
+    PUBSUB = 0
 
 class ChannelType(Enum):
     TCP = 0
-    # SQS = 1
 
 
 class Config:
@@ -49,14 +44,10 @@ class Config:
         }.get(environ["USER_STORAGE"])
         self._user_storage: model.UserStorage
         if self._user_storage_type == Storage.PERSISTENT:
-            # s3_data_bucket = environ["S3_DATA_BUCKET"]
             cloud_storage_bucket = environ["CLOUD_STORAGE_BUCKET"]
             self._user_storage = model.CloudStorageStorage(bucket_name=cloud_storage_bucket)
         else:
             raise RuntimeError("Not implemented!")
-            # self._user_storage = model.UserDynamoStorage(
-            #     table_name=f"{self._deployment_name}-data"
-            # )
 
         # configure system storage handle
         self._system_storage_type = {"key-value": Storage.KEY_VALUE}.get(
@@ -71,15 +62,10 @@ class Config:
         self._distributor_queue: Optional[distributor_queue.DistributorQueue]
         if with_distributor_queue:
             self._distributor_queue_type = {
-                # "dynamodb": QueueType.DYNAMODB,
                 "pubsub": QueueType.PUBSUB,
             }.get(environ["DISTRIBUTOR_QUEUE"])
-            # if self._distributor_queue_type == QueueType.DYNAMODB:
-            #     self._distributor_queue = distributor_queue.DistributorQueueDynamo(
-            #         f"{self._deployment_name}"
-            #     )
             if self._distributor_queue_type == QueueType.PUBSUB:
-                self._distributor_queue = distributor_queue.DistributorQueuePubSub( # FIXME: pass project and topic id
+                self._distributor_queue = distributor_queue.DistributorQueuePubSub(
                     "top-cascade-392319", "faasPubSub"
                 )
             else:
@@ -90,14 +76,11 @@ class Config:
         # configure client channel
         self._client_channel_type = {
             "tcp": ChannelType.TCP,
-            # "sqs": ChannelType.SQS,
         }.get(environ["CLIENT_CHANNEL"])
 
         self._client_channel: control.ClientChannel
         if self._client_channel_type == ChannelType.TCP:
             self._client_channel = control.ClientChannelTCP()
-        # elif self._client_channel_type == ChannelType.SQS:
-        #     self._client_channel = control.ClientChannelSQS()
         else:
             raise RuntimeError("Not implemented!")
 

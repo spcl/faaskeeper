@@ -6,11 +6,11 @@ import hashlib
 
 from typing import Dict, List, Set
 from concurrent.futures import Future, ThreadPoolExecutor
+from datetime import datetime
 
 from functions.gcp.control.gcloud_function import CloudFunction
 from functions.gcp.control.distributor_events import DistributorEvent, DistributorEventType, builder
 from faaskeeper.version import SystemCounter
-from faaskeeper.watch import WatchType, WatchEventType
 from functions.gcp.control.channel import Client
 from functions.gcp.stats import TimingStatistics
 from functions.gcp.config import Config
@@ -26,7 +26,7 @@ epoch_counters: Dict[str, Set[str]] = {}
 config = Config.instance(False)
 
 for r in regions:
-    # region_watches[r] = Watches(config.deployment_name, r)
+    region_watches[r] = Watches(config.deployment_name, r)
     epoch_counters[r] = set()
     region_clients[r] = CloudFunction(r, "top-cascade-392319")
 
@@ -53,15 +53,11 @@ def launch_watcher(operation: DistributorEvent, region: str, json_in: dict):
 
         # pop the pending watch: update epoch counters for the node and parent in user storage.
         epoch_counters[r].remove(f"{hashed_path}_{watch_type}_{timestamp}")
-        operation.update_epoch_counters(config.user_storage, epoch_counters[r]) # 结合client那边，或许应该要放到其他地方
+        operation.update_epoch_counters(config.user_storage, epoch_counters[r])
         return True
     return False
 
-# def query_watch_id(region: str, node_path: str):
-#    return region_watches[region].get_watch_counters(node_path)
-
 # Register an HTTP function with the Functions Framework
-# on GCP, it is named main.py
 @functions_framework.http
 def handler(request):
     # Your code here
@@ -71,25 +67,20 @@ def handler(request):
     watches_submitters: List[Future] = []
     record = base64.b64decode(request_json["message"]["data"]).decode("utf-8")
 
-    # no datastore trigger added
-
     # trigger by pub/sub subscriber through push substription to ensure message ordering.
     write_event = json.loads(record)
-    print('distributor |', write_event)
     event_type = DistributorEventType(int(write_event["type"]))
-    # print( "writer |",write_event["sequence_timestamp"], int(write_event["sequence_timestamp"].split(".")[0]))
-    counter: SystemCounter = SystemCounter.from_raw_data([int(write_event["sequence_timestamp"])])
 
+    publish_time = datetime.strptime(request_json["message"]["publishTime"], "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%Y%m%d%H%M%S%f")
+    counter: SystemCounter = SystemCounter.from_raw_data([int(publish_time[:-3])])
     try:
         client = Client.deserialize(write_event)
-        print('distributor |', client)
-        operation = builder(counter, event_type, write_event, CLOUD_PROVIDER.GCP)
-        print('distributor |', operation)
+        operation = builder(event_type, write_event, CLOUD_PROVIDER.GCP)
         begin_write = time.time()
         # write new data
         for r in regions: # we do not consider regions for now, because
             ret = operation.execute(
-                config.system_storage, config.user_storage, epoch_counters[r]
+                config.system_storage, config.user_storage, epoch_counters[r], counter
             )
         end_write = time.time()
         timing_stats.add_result("write", end_write - begin_write)
@@ -108,7 +99,7 @@ def handler(request):
                     executor.submit(launch_watcher, operation, r, watch_dict) # watch: {DistributorEvent, watchType, timestamp, path}
                 )
 
-        for r in regions: # we do not consider regions for now
+        for r in regions:
             epoch_counters[r].update(operation.epoch_counters())
 
         if ret:

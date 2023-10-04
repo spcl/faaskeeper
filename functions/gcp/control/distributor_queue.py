@@ -28,8 +28,8 @@ class DistributorQueuePubSub(DistributorQueue):
         '''
         batch_settings = pubsub_v1.types.BatchSettings(
             max_messages=10,  # default 100, now I disable batching
-            max_bytes= 1 * 1000 * 1000,  # default 1 MB, still 1 MB
-            max_latency=1,  # default 10 ms, now is 1s
+            max_bytes= 1 * 1000 * 1000,  # default 1 MB, still 1 MB -> 1000 * 1000 KB
+            max_latency=0.01,  # default 10 ms, now is 1s
         )
 
         publisher_options = pubsub_v1.types.PublisherOptions(enable_message_ordering=True) # enable FIFO
@@ -37,8 +37,6 @@ class DistributorQueuePubSub(DistributorQueue):
         self.publisher_client = pubsub_v1.PublisherClient(publisher_options=publisher_options, batch_settings= batch_settings)
         self._topic_id = topic_id # faasPubSub
         self._project_id = project_id
-        # maybe we need to create a topic by code, or can it be set in yaml
-        # self._topic_id = "faasPubSub" #distributor
         self._topic_path = self.publisher_client.topic_path(self._project_id, self._topic_id)
 
     @property
@@ -67,20 +65,16 @@ class DistributorQueuePubSub(DistributorQueue):
         # publish a message
         # we need some way to serialize the DistributorEvent and client
         client_serialization = client.serialize()
-        sequence_timestamp = int(datetime.now().timestamp() * 1000000)
         payload: Dict[str, str] = {
             **client_serialization,
             **event.serialize(None, CLOUD_PROVIDER.GCP),
-            "sequence_timestamp": sequence_timestamp
         }
-        print("distributor queue |", payload)
         data = json.dumps(payload).encode() 
 
         future = self.publisher_client.publish(self.topic_path, data= data, ordering_key= client.session_id)
         try:
             print("distributor queue | message id", future.result()) # a successful publish response
-            # we create a timestamp as a sequencenumber like in sqs and servicebus
-            return SystemCounter.from_raw_data([sequence_timestamp])
+            return None
         except RuntimeError:
             self.publisher_client.resume_publish(self.topic_path, ordering_key= client.session_id)
     

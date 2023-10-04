@@ -89,6 +89,7 @@ class DistributorEvent(ABC):
         system_storage: SystemStateStorage,
         user_storage: UserStorage,
         epoch_counters: Set[str],
+        system_counter
     ) -> Optional[dict]:
         pass
 
@@ -246,11 +247,10 @@ class DistributorCreateNode(DistributorEvent):
         system_storage: SystemStateStorage,
         user_storage: UserStorage,
         epoch_counters: Set[str],
+        system_counter
     ) -> Optional[dict]:
-
         system_node = system_storage.read_node(self.node)
         status = self._node_status(system_node)
-
         # FIXME: parent counter
         if status == TriBool.INCORRECT:
             logging.error("Failing to apply the update - node updated by someone else")
@@ -261,7 +261,7 @@ class DistributorCreateNode(DistributorEvent):
             }
 
         elif status == TriBool.LOCKED:
-            print("Failing to apply the update - node still locked")
+            self.set_system_counter(system_counter)
             transaction_status, old_nodes = system_storage.commit_and_unlock_nodes_multi(
                 [
                     system_storage.generate_commit_node(
@@ -316,6 +316,8 @@ class DistributorCreateNode(DistributorEvent):
     def set_system_counter(self, system_counter: SystemCounter):
         self.node.created = Version(system_counter, None)
         self.node.modified = Version(system_counter, None)
+
+        print(self.node.modified.system._version, self.node.modified.system, self.node.created, self.node.modified)
 
         self.parent.modified = Version(system_counter, None)
 
@@ -425,8 +427,8 @@ class DistributorSetData(DistributorEvent):
         
         elif cloud_provider == CLOUD_PROVIDER.GCP:
             node = Node(event_data["path"])
-            counter = SystemCounter.from_raw_data(event_data["counter"])
-            node.modified = Version(counter, None)
+            # counter = SystemCounter.from_raw_data(event_data["counter"])
+            # node.modified = Version(counter, None)
             # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
             # node.data = base64.b64decode(event_data["data"]["B"])
             node.data_b64 = event_data["data"]
@@ -456,14 +458,13 @@ class DistributorSetData(DistributorEvent):
         system_storage: SystemStateStorage,
         user_storage: UserStorage,
         epoch_counters: Set[str],
+        system_counter,
     ) -> Optional[dict]:
-
         if self._config.benchmarking:
             begin_read = time.time()
         system_node = system_storage.read_node(self.node)
 
         status = self._node_status(system_node)
-
         if status == TriBool.INCORRECT:
             logging.error("Failing to apply the update - node updated by someone else")
             return {
@@ -474,7 +475,9 @@ class DistributorSetData(DistributorEvent):
         elif status == TriBool.LOCKED:
 
             logging.error("Failing to apply the update - node still locked")
-
+            self.set_system_counter(system_counter)
+            print("set_data commit",self.node.modified.system._version, self.node.modified.system, self.node, self.node.modified)
+            print("new place", type(self))
             commit_status = system_storage.commit_and_unlock_node(
                 self.node,
                 self.lock_timestamp,
@@ -543,8 +546,9 @@ class DistributorSetData(DistributorEvent):
         ]
 
     def set_system_counter(self, system_counter: SystemCounter):
-
+        print("set_data", system_counter._version)
         self.node.modified = Version(system_counter, None)
+        print("set_data_after", self.node.modified.system._version, self.node, self.node.modified, self.node.modified.system)
     
     def generate_watches_event(self, region_watches: Watches) -> List[Watches.Watch_Event]:
         all_watches = []
@@ -659,8 +663,8 @@ class DistributorDeleteNode(DistributorEvent):
         system_storage: SystemStateStorage,
         user_storage: UserStorage,
         epoch_counters: Set[str],
+        system_counter
     ) -> Optional[dict]:
-
         system_node = system_storage.read_node(self.node)
 
         # TODO: in the future, we want to allow reader-writer locks on the parent node.
@@ -679,7 +683,7 @@ class DistributorDeleteNode(DistributorEvent):
 
         elif status == TriBool.LOCKED:
             logging.error("Failing to apply the update - node still locked")
-
+            self.set_system_counter(system_counter)
             transaction_status, old_nodes = system_storage.commit_and_unlock_nodes_multi(
                 [
                     system_storage.generate_commit_node(
@@ -767,7 +771,7 @@ class DistributorDeleteNode(DistributorEvent):
         return DistributorEventType.DELETE_NODE
 
 
-def builder(counter: SystemCounter, event_type: DistributorEventType, event: dict, cloud_provider: CLOUD_PROVIDER = CLOUD_PROVIDER.AWS
+def builder(event_type: DistributorEventType, event: dict, cloud_provider: CLOUD_PROVIDER = CLOUD_PROVIDER.AWS
 ) -> DistributorEvent:
     '''
     cloud_provider: AWS=0, GCP=1, AZURE=2, default is AWS
@@ -783,7 +787,5 @@ def builder(counter: SystemCounter, event_type: DistributorEventType, event: dic
         raise NotImplementedError()
 
     distr_event = ops[event_type]
-    op:DistributorEvent = distr_event.deserialize(event, cloud_provider)
-    op.set_system_counter(counter)
-
+    op = distr_event.deserialize(event, cloud_provider)
     return op
