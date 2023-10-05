@@ -36,7 +36,6 @@ class Storage():
         pass
 
 class CloudStorageStorage(Storage):
-    # the name of the GCP's cloud object storage is 'Cloud Storage'. 
     def __init__(self, bucket_name: str) -> None:
         self._storage = CloudStorageDriver(bucket_name)
 
@@ -46,9 +45,10 @@ class CloudStorageStorage(Storage):
     
     def update(self, node: Node, updates: Set[NodeDataType] = set()):
         # read then write
+        # Even though the S3 serializer on the client side is used, it can be used as a general one.
         if not node.has_data or not node.has_children or not node.has_created:
             node_data = self._storage.read(node.path)
-            # if we do not have children property, we deserialize and fetch the property.
+            # if there is no children property, then deserialize and fetch the property.
             read_node = S3Reader.deserialize(
                 node.path, node_data, not node.has_data, not node.has_children
             )
@@ -62,7 +62,7 @@ class CloudStorageStorage(Storage):
             if not node.has_modified:
                 node.modified = read_node.modified
         serialized_data = S3Reader.serialize(node)
-        self._storage.write(node.path, serialized_data)  # S3Reader.serialize(node))
+        self._storage.write(node.path, serialized_data)
         return OpResult.SUCCESS
 
     def delete(self, node: Node):

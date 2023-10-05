@@ -17,7 +17,7 @@ def init(service_name: str, region: str):
     with datastore_client.transaction():
         root_node = datastore.Entity(datastore_client.key(kind_name, "/"))
         root_node.update({
-            "cFxidSys": [0], #["0"]
+            "cFxidSys": [0],
             "mFxidSys": [0],
             "children": []
         })
@@ -40,10 +40,3 @@ def init(service_name: str, region: str):
 
     root_blob = cloud_storage_bucket.blob("/")
     root_blob.upload_from_string(data=S3Reader.serialize(root_node))
-
-    ####
-    # comment out upload part and uncomment the read part below to verify
-    ####
-    # blob = cloud_storage_bucket.get_blob("/")
-    # file_content = blob.download_as_bytes()
-    # print(S3Reader.deserialize("/", file_content, not root_node.has_data, not root_node.has_children).created.system.serialize())

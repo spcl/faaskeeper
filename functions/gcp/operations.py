@@ -150,9 +150,8 @@ class CreateNodeExecutor(Executor):
 
         self._node.created = Version(self._counter, None)
         self._node.modified = Version(self._counter, None)
-        print("writer commits", self._counter._version,self._node.created.system._version)
 
-        # If we fail, we do not notify the user - it is now the job of the distributor.
+        # For now, distributor handles commit and unlock nodes
         system_storage.commit_and_unlock_nodes_multi(
             [
                 system_storage.generate_commit_node(
@@ -223,7 +222,6 @@ class SetDataExecutor(Executor):
     def lock_and_read(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
 
         path = self.op.path
-        print(f"Attempting to write data on node at {path}")
         
         if self._config.benchmarking:
             self._begin = time.time()
@@ -248,7 +246,6 @@ class SetDataExecutor(Executor):
         
         verInReq = int(self.op._version)
         if verInReq != -1 and self._node.modified.system._version[0] != verInReq:
-            print(self._node.modified.system._version[0], type(self._node.modified.system._version[0]), self.op._version, type(self.op._version), verInReq, type(verInReq))
             system_storage.unlock_node(path, self._timestamp)
             return (False, {"status": "failure", "path": path, "reason": "version_doesnt_match"})
             

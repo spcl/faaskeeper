@@ -1,5 +1,5 @@
 from .storage import Storage
-from google.cloud import storage
+from google.cloud import storage, exceptions
 from typing import Union
 from faaskeeper.stats import StorageStatistics
 
@@ -11,17 +11,16 @@ class CloudStorage(Storage):
     
     def write(self, key: str, data: Union[dict, bytes]):
         blob = self._bucket.blob(key)
-        blob.upload_from_string(data=data) # data in AWS and GCP is in the format of bytes 
-        StorageStatistics.instance().add_write_units(1) # why 1?
+        blob.upload_from_string(data=data)
+        StorageStatistics.instance().add_write_units(1)
 
     def delete(self, key: str):
         '''
         WARNING: Object deletion cannot be undone. 
         '''
         blob = self._bucket.blob(key)
-        # generation_match_precondition = None
 
-        blob.reload() # delete only if the generation matches
+        blob.reload()
         generation_match_precondition = blob.generation
 
         blob.delete(if_generation_match=generation_match_precondition)
@@ -31,7 +30,7 @@ class CloudStorage(Storage):
     def read(self, key: str):
         blob = self._bucket.get_blob(key)
         file_content = blob.download_as_bytes()
-        StorageStatistics.instance().add_read_units(1)
+        StorageStatistics.instance().add_read_units(1) # 1 entity read
         return file_content
     
 
@@ -41,4 +40,4 @@ class CloudStorage(Storage):
 
     @property
     def errorSupplier(self):
-        return Exception # I dont see any cloud storage sepcific error base class
+        return exceptions

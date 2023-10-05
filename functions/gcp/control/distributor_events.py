@@ -64,7 +64,6 @@ class DistributorEvent(ABC):
         '''
         pass
 
-    # FIXME: another way to design this is to create class like DistributorEventAWS DistributorEventGCP inherent from the base class
     @staticmethod
     @abstractmethod
     def deserialize(event_data: dict, cloud_provider: CLOUD_PROVIDER = CLOUD_PROVIDER.AWS):
@@ -203,12 +202,7 @@ class DistributorCreateNode(DistributorEvent):
         
         elif cloud_provider == CLOUD_PROVIDER.GCP:
             node = Node(event_data["path"])
-            # counter = SystemCounter.from_provider_schema(event_data["counter"])
-            # node.created = Version(counter, None)
-            # node.modified = Version(counter, None)
             node.children = []
-            # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
-            # node.data = base64.b64decode(event_data["data"]["B"])
             node.data_b64 = event_data["data"]
 
             parent_node = Node(event_data["parent_path"])
@@ -251,7 +245,6 @@ class DistributorCreateNode(DistributorEvent):
     ) -> Optional[dict]:
         system_node = system_storage.read_node(self.node)
         status = self._node_status(system_node)
-        # FIXME: parent counter
         if status == TriBool.INCORRECT:
             logging.error("Failing to apply the update - node updated by someone else")
             return {
@@ -316,8 +309,6 @@ class DistributorCreateNode(DistributorEvent):
     def set_system_counter(self, system_counter: SystemCounter):
         self.node.created = Version(system_counter, None)
         self.node.modified = Version(system_counter, None)
-
-        print(self.node.modified.system._version, self.node.modified.system, self.node.created, self.node.modified)
 
         self.parent.modified = Version(system_counter, None)
 
@@ -427,10 +418,6 @@ class DistributorSetData(DistributorEvent):
         
         elif cloud_provider == CLOUD_PROVIDER.GCP:
             node = Node(event_data["path"])
-            # counter = SystemCounter.from_raw_data(event_data["counter"])
-            # node.modified = Version(counter, None)
-            # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
-            # node.data = base64.b64decode(event_data["data"]["B"])
             node.data_b64 = event_data["data"]
 
             session_id = event_data["session_id"]
@@ -486,10 +473,6 @@ class DistributorSetData(DistributorEvent):
             )
             # Transaction failed, let's verify that
             if not commit_status:
-
-                # We shouldn't do a second read here.
-                # Unfortunately, DynamoDB update-item returns the attributes only on a succesful
-                # update. When it fails, we need to read manually.
                 system_node = system_storage.read_node(self.node)
 
                 if self._node_status(system_node) != TriBool.CORRECT:
@@ -510,7 +493,6 @@ class DistributorSetData(DistributorEvent):
         if self._config.benchmarking:
             begin_write = time.time()
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
-        # cuz it contains actual data
         user_storage.update(self.node, set([NodeDataType.MODIFIED, NodeDataType.DATA]))
         if self._config.benchmarking:
             end_write = time.time()
@@ -546,10 +528,8 @@ class DistributorSetData(DistributorEvent):
         ]
 
     def set_system_counter(self, system_counter: SystemCounter):
-        print("set_data", system_counter._version)
         self.node.modified = Version(system_counter, None)
-        print("set_data_after", self.node.modified.system._version, self.node, self.node.modified, self.node.modified.system)
-    
+
     def generate_watches_event(self, region_watches: Watches) -> List[Watches.Watch_Event]:
         all_watches = []
         all_watches += region_watches.query_watches(
@@ -700,7 +680,6 @@ class DistributorDeleteNode(DistributorEvent):
                 return_old_on_failure=[self._parent_node, self._node],
             )
             # Transaction failed, let's verify that
-            # if not transaction_status:
             if not transaction_status and len(old_nodes) > 0:
 
                 if self._node_status(old_nodes[1]) != TriBool.CORRECT:
@@ -713,7 +692,6 @@ class DistributorDeleteNode(DistributorEvent):
 
         # FIXME: update
         # FIXME: retain the node to keep counters
-        # self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.delete(self.node)
         self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
         user_storage.update(self.parent, set([NodeDataType.CHILDREN]))

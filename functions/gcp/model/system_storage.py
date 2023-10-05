@@ -131,9 +131,8 @@ class DataStoreSystemStateStorage(SystemStateStorage):
         try:
             with local_client.transaction():
                 node_info = self._state_storage.read(path)
-                print("system_storage | lock_node", node_info)
                 if node_info == None:
-                    # node does not exist, therefore we upsert here, same with AWS: TODO: do we want that?
+                    # node does not exist, therefore we upsert here, same with AWS
                     # note that if a node does NOT exist,
                     # the datastore only has (path, timelock)
                     node = datastore.Entity(node_info.key)
@@ -142,7 +141,7 @@ class DataStoreSystemStateStorage(SystemStateStorage):
                         "timelock": timestamp
                     })
                     
-                    StorageStatistics.instance().add_write_units(1) # AWS has CapacityUnits, what is the equavelent for GCP?
+                    StorageStatistics.instance().add_write_units(1) 
                         
                     local_client.put(node)
 
@@ -157,18 +156,17 @@ class DataStoreSystemStateStorage(SystemStateStorage):
                     if "timelock" not in node_info or node_info["timelock"] < (timestamp - self.lock_lifetime):
                         # check succeeds
                         # lock the node
-                        print("system_storage | node exist, start to lock")
                         node_info["timelock"] = timestamp
                         local_client.put(node_info)
 
-                        StorageStatistics.instance().add_write_units(1) # AWS has CapacityUnits, what is the equavelent for GCP?
+                        StorageStatistics.instance().add_write_units(1)
                         
                         # construct the Node instance based on result, if the node exist because a session could be disconnected right after this step
                         n: Optional[Node] = None
                         if "cFxidSys" in node_info:
                             n = Node(path)
                             created = SystemCounter.from_raw_data(
-                                node_info["cFxidSys"]  # type: ignore
+                                node_info["cFxidSys"] 
                             )
                             n.created = Version(
                                 created,
@@ -185,8 +183,7 @@ class DataStoreSystemStateStorage(SystemStateStorage):
                             )
                             n.children = node_info["children"]
                         return (True, n)
-                    print("system_storage | lock is not expired")
-                
+
                 return (False, None)
         except self._state_storage.errorSupplier.Conflict:
             print("lock_node |", "there is a conflict, lock node fails")
@@ -209,16 +206,13 @@ class DataStoreSystemStateStorage(SystemStateStorage):
         try:
             with local_client.transaction():
                 node_info = self._state_storage.read(path)
-                print("system_storage | unlock_node before deletion", node_info)
 
                 if "timelock" in node_info and node_info["timelock"] == lock_timestamp:
-                    del node_info["timelock"] # we only remove timelock
-
-                    print("system_storage | unlock_node after deletion", node_info)
+                    del node_info["timelock"]
                     assert "timelock" not in node_info
-                StorageStatistics.instance().add_write_units(1) # AWS has CapacityUnits, what is the equavelent for GCP?
-                    
+
                 local_client.put(node_info)
+                StorageStatistics.instance().add_write_units(1)    
                 return True
 
         except self._state_storage.errorSupplier.Conflict:
@@ -238,18 +232,16 @@ class DataStoreSystemStateStorage(SystemStateStorage):
                 if node_info is not None:
                     to_commit = self.generate_commit_node(node, timestamp, updates, update_event_id)
                     if "timelock" in node_info and node_info["timelock"] == to_commit._lock:
-                        # unlock timelock, commit details should not have "timelock"
-                        del node_info["timelock"] # remove timelock in the node
+                        del node_info["timelock"]
                         assert "timelock" not in to_commit.commit_details
 
                         if to_commit._update_event_id_to_append is not None:
                             temp = node_info["pendingUpdates"] + to_commit._update_event_id_to_append
                             to_commit.commit_details["pendingUpdates"] = temp
 
-                        # we should overlap with node
+                        # override new properties of node and keep the unchanged ones.
                         for property_to_update in to_commit.commit_details:
                             node_info[property_to_update] = to_commit.commit_details[property_to_update]
-                        print("system_storage | node to update:", node)
                         local_client.put(node_info)
         except self._state_storage.errorSupplier.Conflict:
             print("there is a conflict, lock node fails")
@@ -281,42 +273,36 @@ class DataStoreSystemStateStorage(SystemStateStorage):
 
         try:
             with local_client.transaction():
-                # updates
                 update_keys = []
-                update_mapper = {} # str: CommitNode
+                update_mapper = {} 
                 for update in updates:
-                    # print("trying to get", self._state_storage.storage_name ,update.node.path)
                     update_key = local_client.key(self._state_storage.storage_name,update.node.path)
                     update_keys.append(update_key)
                     update_mapper[update.node.path] = update
 
                 nodes = local_client.get_multi(update_keys)
-                print("system_storage | multi", nodes)
                 nodes_to_update = []
                 for node in nodes:
-                    # conditional expression
                     to_commit: DataStoreSystemStateStorage.CommitNode = update_mapper[node.key.name]
 
                     if "timelock" in node and node["timelock"] == to_commit._lock:
-                        # unlock timelock, commit details should not have "timelock"
-                        del node["timelock"] # remove timelock in the node
+                        del node["timelock"]
                         assert "timelock" not in to_commit.commit_details
 
                         if to_commit._update_event_id_to_append is not None: # set data
                             temp = node["pendingUpdates"] + to_commit._update_event_id_to_append
                             to_commit.commit_details["pendingUpdates"] = temp
 
-                        # we should overlap with node
+                        # override new properties of node and keep the unchanged ones.
                         for property_to_update in to_commit.commit_details:
                             node[property_to_update] = to_commit.commit_details[property_to_update]
-                        print("system_storage | node to update:", node)
                         nodes_to_update.append(node)
 
                 local_client.put_multi(nodes_to_update)
 
                 # deletes
                 delete_keys:List[datastore.Key] = []
-                delete_mapper = {} # str: CommitNode
+                delete_mapper = {}
                 for delete in deletions:
                     delete_keys.append(local_client.key(self._state_storage.storage_name,delete.node.path))
                     delete_mapper[delete.node.path] = delete
@@ -334,18 +320,16 @@ class DataStoreSystemStateStorage(SystemStateStorage):
                             temp = node["pendingUpdates"] + to_commit._update_event_id_to_append
                             to_commit.commit_details["pendingUpdates"] = temp
                         else:
-                            # we only keep pendingUpdates, remove created, modified, children, timelock
+                            # only keep pendingUpdates, remove created, modified, children, timelock
                             to_commit.commit_details["pendingUpdates"] = node["pendingUpdates"]
                         
                         node["pendingUpdates"] = to_commit.commit_details["pendingUpdates"]
-                        print("system_storage | node to delete:", node)
                         nodes_to_delete.append(node)
                 local_client.put_multi(nodes_to_delete)
 
-                StorageStatistics.instance().add_write_units(len(update_keys) + len(delete_keys)) # AWS has CapacityUnits, what is the equavelent for GCP?
+                StorageStatistics.instance().add_write_units(len(update_keys) + len(delete_keys))
                 
                 success = True
-                print("system_storage | Commit done")
                 return (success, old_values)
             
         except self._state_storage.errorSupplier.Conflict:
@@ -354,20 +338,16 @@ class DataStoreSystemStateStorage(SystemStateStorage):
             return (success, old_values)
     
     def generate_commit_node(self, node: Node, timestamp: int, updates: Set[NodeDataType] = set(), update_event_id: str = None) -> CommitNode:
-        # transactional batch operation, no ancestor path feature in datastore
         # Similar to AWS, we generate a dict for each node containing updated properties: cFxidSys, mFxidSys, pendingUpdates, children
         # in the following structure key: node.path values: dict {properties}
         local_client = self._state_storage.client
         assert local_client is not None
 
-        ret = DataStoreSystemStateStorage.CommitNode(node, status=None, timelock=timestamp) # we do not need Exist property here
+        ret = DataStoreSystemStateStorage.CommitNode(node, status=None, timelock=timestamp)
 
         update_values = {}
-        # TODO: not finished yet
         if NodeDataType.CREATED in updates:
-            #update_values["cFxidSys"] = node.created.system._version
-            update_values["cFxidSys"] = node.created.system._version # a workaround because we do not if there is a Datastore serialization
-            # initialize the list of pending updates
+            update_values["cFxidSys"] = node.created.system._version
             update_values["pendingUpdates"] = [] if update_event_id is None else [update_event_id]
         
         elif update_event_id is not None: # not created and update_event_id is not None
@@ -382,7 +362,6 @@ class DataStoreSystemStateStorage(SystemStateStorage):
             update_values["children"] = node.children
             
         ret.commit_details = update_values
-        print("system_storage | generate_commit_node", node.path ,update_values)
 
         return ret
     
@@ -393,7 +372,6 @@ class DataStoreSystemStateStorage(SystemStateStorage):
         return self._parse_node(node, res)
     
     def _parse_node(self, node: Node, response: dict, complete_data=True) -> NodeWithLock:
-        # FIXME: check existence
         if response == None:
             return NodeWithLock(node, NodeWithLock.Status.NOT_EXISTS)
         
@@ -415,9 +393,6 @@ class DataStoreSystemStateStorage(SystemStateStorage):
         if dynamo_node.status == NodeWithLock.Status.NOT_EXISTS or not complete_data:
             return dynamo_node
 
-        # if it exist, we assign cfxid and mfxid if exist
-
-        # FIXME: _type_serializer is still AWS
         if "cFxidSys" in response:
             created = SystemCounter.from_raw_data(response["cFxidSys"])  # type: ignore
             dynamo_node.node.created = Version(
@@ -441,7 +416,6 @@ class DataStoreSystemStateStorage(SystemStateStorage):
         try:
             with local_client.transaction():
                 node_info = self._state_storage.read(node.path)
-                print("system_storage | pop pending updates", node_info)
                 if node_info == None:
                     return None
                 else:
@@ -466,6 +440,5 @@ class DataStoreSystemStateStorage(SystemStateStorage):
             ret._update_event_id_to_append = [update_event_id]
             
         ret.commit_details = {}
-        print("system_storage | generate_delete_node", node.path)
 
         return ret

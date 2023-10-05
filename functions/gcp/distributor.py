@@ -51,7 +51,6 @@ def launch_watcher(operation: DistributorEvent, region: str, json_in: dict):
         timestamp = json_in["timestamp"]
         watch_type = json_in["type"]
 
-        # pop the pending watch: update epoch counters for the node and parent in user storage.
         epoch_counters[r].remove(f"{hashed_path}_{watch_type}_{timestamp}")
         operation.update_epoch_counters(config.user_storage, epoch_counters[r])
         return True
@@ -60,14 +59,12 @@ def launch_watcher(operation: DistributorEvent, region: str, json_in: dict):
 # Register an HTTP function with the Functions Framework
 @functions_framework.http
 def handler(request):
-    # Your code here
     request_json = request.get_json(silent=True)
     request_args = request.args
 
     watches_submitters: List[Future] = []
     record = base64.b64decode(request_json["message"]["data"]).decode("utf-8")
 
-    # trigger by pub/sub subscriber through push substription to ensure message ordering.
     write_event = json.loads(record)
     event_type = DistributorEventType(int(write_event["type"]))
 
@@ -77,8 +74,7 @@ def handler(request):
         client = Client.deserialize(write_event)
         operation = builder(event_type, write_event, CLOUD_PROVIDER.GCP)
         begin_write = time.time()
-        # write new data
-        for r in regions: # we do not consider regions for now, because
+        for r in regions:
             ret = operation.execute(
                 config.system_storage, config.user_storage, epoch_counters[r], counter
             )
@@ -86,7 +82,7 @@ def handler(request):
         timing_stats.add_result("write", end_write - begin_write)
 
         # start watch delivery
-        for r in regions: # deliver watch concurrently
+        for r in regions:
             for watch in operation.generate_watches_event(region_watches[r]):
                 watch_dict = {
                     "event": watch.watch_event_type,
@@ -108,7 +104,6 @@ def handler(request):
                 client,
                 ret,
             )
-            # processed_events += 1
         else:
             config.client_channel.notify(
                 client,
