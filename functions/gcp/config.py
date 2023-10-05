@@ -66,7 +66,7 @@ class Config:
             }.get(environ["DISTRIBUTOR_QUEUE"])
             if self._distributor_queue_type == QueueType.PUBSUB:
                 self._distributor_queue = distributor_queue.DistributorQueuePubSub(
-                    "top-cascade-392319", "faasPubSub"
+                    "top-cascade-392319", environ["DISTRIBUTOR_QUEUE_NAME"]
                 )
             else:
                 raise RuntimeError("Not implemented!")
