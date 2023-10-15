@@ -165,6 +165,12 @@ def service(output_config: str, provider: str, config, clean: bool):
         logging.info(f"Deploy functions in {provider}_subscriptions.yml to provider: {provider}")
         execute(f"sls deploy --stage {service_name} -c {provider}_subscriptions.yml", env=env)
 
+        service_name = config_json["deployment-name"]
+        gcp_init(f"faaskeeper-{service_name}", env["FK_DEPLOYMENT_REGION"])
+        # final_config = aws_config(config_json)
+        # logging.info(f"Exporting FaaSKeeper config to {output_config}!")
+        # json.dump(final_config, open(output_config, 'w'), indent=2)
+
 @deploy.command()
 @common_params
 @click.option("--function", type=str, default="")
@@ -185,18 +191,6 @@ def functions(provider: str, config, function: str):
             f"sls deploy --stage {service_name} --function {func} -c {provider}.yml",
             env=env,
         )
-
-@deploy.command()
-@common_params
-def localtestgcp(provider: str, config):
-    config_json = json.load(config)
-    service_name = config_json["deployment-name"]
-    if provider == "gcp":
-        gcp_init(f"faaskeeper-{service_name}", "us-central1")
-        # final_config = aws_config(config_json)
-        # logging.info(f"Exporting FaaSKeeper config to {output_config}!")
-        # json.dump(final_config, open(output_config, 'w'), indent=2)
-
 
 @cli.group(invoke_without_command=True)
 @click.pass_context
