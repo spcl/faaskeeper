@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from faaskeeper.version import SystemCounter
-from functions.cloud_providers import CLOUD_PROVIDER
+from functions.gcp.cloud_providers import CLOUD_PROVIDER
 from functions.gcp.control.channel import Client
 from functions.gcp.control.distributor_events import DistributorEvent
 from functions.gcp.control.channel import Client
@@ -52,12 +52,12 @@ class DistributorQueuePubSub(DistributorQueue):
         }
 
         data = base64.b64encode(json.dumps(payload).encode())
-
-        future = self.publisher_client.publish(self.topic_path, data=data, ordering_key= client.session_id)
+        # how does AWS do? give the same ordering key?
+        future = self.publisher_client.publish(self.topic_path, data=data, ordering_key= "0")
         try:
             print(future.result()) # a successful publish response
         except RuntimeError:
-            self.publisher_client.resume_publish(self.topic_path, ordering_key= client.session_id)
+            self.publisher_client.resume_publish(self.topic_path, ordering_key= "0")
     
     def push_and_count(self, event: DistributorEvent, client: Client) -> SystemCounter:
         client_serialization = client.serialize()

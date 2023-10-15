@@ -1,0 +1,19 @@
+{
+  "verbose": "true",
+  "cloud-provider": "gcp",
+  "project-id": "wide-axiom-402003",
+  "project-credentials": "/home/ubuntu/summer/workingDirectoryMyFork/faaskeeper/config/wide-axiom-402003-4c1583c1e9e5.json",
+  "port": 5000,
+  "deployment-name": "dev",
+  "deployment-region": "us-central1",
+  "user-storage": "persistent",
+  "system-storage": "key-value",
+  "heartbeat-frequency": 12,
+  "worker-queue": "pubsub",
+  "distributor-queue": "pubsub",
+  "client-channel": "tcp",
+  "configuration": {
+    "benchmarking": "True",
+    "benchmarking-frequency": 1
+  }
+}

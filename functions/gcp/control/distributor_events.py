@@ -16,7 +16,7 @@ from boto3.dynamodb.types import TypeDeserializer
 from faaskeeper.node import Node, NodeDataType
 from faaskeeper.version import EpochCounter, SystemCounter, Version
 from faaskeeper.watch import WatchEventType, WatchType
-from functions.cloud_providers import CLOUD_PROVIDER
+from functions.gcp.cloud_providers import CLOUD_PROVIDER
 from functions.gcp.model.system_storage import SystemStateStorage
 from functions.gcp.model.system_storage import NodeWithLock as SystemNodeWithLock
 from functions.gcp.model.user_storage import Storage as UserStorage

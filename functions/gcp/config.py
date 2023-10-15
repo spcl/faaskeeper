@@ -48,7 +48,6 @@ class Config:
             self._user_storage = model.CloudStorageStorage(bucket_name=cloud_storage_bucket)
         else:
             raise RuntimeError("Not implemented!")
-
         # configure system storage handle
         self._system_storage_type = {"key-value": Storage.KEY_VALUE}.get(
             environ["SYSTEM_STORAGE"]
@@ -66,7 +65,7 @@ class Config:
             }.get(environ["DISTRIBUTOR_QUEUE"])
             if self._distributor_queue_type == QueueType.PUBSUB:
                 self._distributor_queue = distributor_queue.DistributorQueuePubSub(
-                    "top-cascade-392319", environ["DISTRIBUTOR_QUEUE_NAME"]
+                    environ["PROJECT_ID"], environ["DISTRIBUTOR_QUEUE_NAME"]
                 )
             else:
                 raise RuntimeError("Not implemented!")

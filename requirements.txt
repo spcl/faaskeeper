@@ -20,7 +20,8 @@ pytest
 nodeenv
 
 # gcp
-google-cloud-datastore==2.16.1 # KV store
-google-cloud-pubsub==2.18.0 # MQ
-functions-framework==3.4.0 # cloud function
-google-cloud-storage==2.10.0 # object storage
+# google-cloud-datastore==2.16.1 # KV store
+# google-cloud-pubsub==2.18.0 # MQ
+# functions-framework==3.4.0 # cloud function
+# google-cloud-storage==2.10.0 # object storage
+# git+https://github.com/mcopik/faaskeeper-python.git@main

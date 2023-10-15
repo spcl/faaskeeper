@@ -14,7 +14,7 @@
     "plugins": [ "serverless-azure-functions" ]
   },
   "gcp": {
-    "region": "eastus",
+    "region": "us-central1",
     "runtime": "python3.8",
     "plugins": [
       "serverless-google-cloudfunctions"

@@ -3,6 +3,7 @@ import base64
 import json
 import time
 import hashlib
+import os
 
 from typing import Dict, List, Set
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -15,7 +16,7 @@ from functions.gcp.control.channel import Client
 from functions.gcp.stats import TimingStatistics
 from functions.gcp.config import Config
 from functions.gcp.model.watches import Watches
-from functions.cloud_providers import CLOUD_PROVIDER
+from functions.gcp.cloud_providers import CLOUD_PROVIDER
 
 regions = ["us-central1"]
 
@@ -28,7 +29,7 @@ config = Config.instance(False)
 for r in regions:
     region_watches[r] = Watches(config.deployment_name, r)
     epoch_counters[r] = set()
-    region_clients[r] = CloudFunction(r, "top-cascade-392319")
+    region_clients[r] = CloudFunction(r, os.environ["PROJECT_ID"])
 
 timing_stats = TimingStatistics.instance()
 
