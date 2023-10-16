@@ -44,7 +44,9 @@ class Config:
         }.get(environ["USER_STORAGE"])
         self._user_storage: model.UserStorage
         if self._user_storage_type == Storage.PERSISTENT:
-            cloud_storage_bucket = environ["CLOUD_STORAGE_BUCKET"]
+            bucket_name = environ["CLOUD_STORAGE_BUCKET"]
+            deployment_name = environ["DEPLOYMENT_NAME"] 
+            cloud_storage_bucket = f"sls-gcp-{deployment_name}-{bucket_name}" 
             self._user_storage = model.CloudStorageStorage(bucket_name=cloud_storage_bucket)
         else:
             raise RuntimeError("Not implemented!")
@@ -53,7 +55,7 @@ class Config:
             environ["SYSTEM_STORAGE"]
         )
         if self._system_storage_type == Storage.KEY_VALUE:
-            self._system_storage = model.DataStoreSystemStateStorage(f"{self._deployment_name}")
+            self._system_storage = model.DataStoreSystemStateStorage(environ["PROJECT_ID"], f"{self._deployment_name}", environ["DB_NAME"])
         else:
             raise RuntimeError("Not implemented!")
 

@@ -70,7 +70,7 @@ Before running the script, please create a project and do the follwing, the step
 
 1. enabling the datastore mode, deployment manager, pubsub, cloud functions and cloud run. To enable cloud functions and cloud run, you need to click the create button in console.
 2. By enabling cloud run service, a service account in the format of XXXXX-compute@developer.gserviceaccount.com will be automatically created.
-3. Create a new service account and get a key pair by clicking the three dots and selecting the manage key. Put the key file into the config folder.
+3. Go to Service Accounts under IAM & Admin and get a key pair of the XXXXX-compute@developer.gserviceaccount.com by clicking the three dots and selecting the manage key. Put the key file into the config folder.
 4. fill the project details in `config/user_config_gcp.json`.
 5. Goto GCP IAM, grant XXXXX-compute@developer.gserviceaccount.com the role of owner and Storage Admin; grant GOOGLE ACCOUNT the Service Account Token Creator role.
 6. In terminal, login the gcloud cmd tool.

@@ -140,7 +140,8 @@ def service(output_config: str, provider: str, config, clean: bool):
             "FK_CLOUD_STORAGE_DATA_BUCKET": bucket_name,
             "FK_GCP_PROJECT_ID": str(config_json["project-id"]),
             "FK_GCP_CREDENTIALS": str(config_json["project-credentials"]),
-
+            "FK_COMPUTE_SERVICE_ACCOUNT": str(config_json["default-compute-service-account"]),
+            "FK_DB_NAME": "test2"
         }
         res = execute(f"gcloud beta deployment-manager type-providers list --format=json")
         existing_providers = json.loads(res)
@@ -164,9 +165,9 @@ def service(output_config: str, provider: str, config, clean: bool):
         execute(f"gcloud storage cp .serverless/faaskeeper-subs.zip gs://sls-gcp-{service_name}-{bucket_name}")
         logging.info(f"Deploy functions in {provider}_subscriptions.yml to provider: {provider}")
         execute(f"sls deploy --stage {service_name} -c {provider}_subscriptions.yml", env=env)
-
-        service_name = config_json["deployment-name"]
-        gcp_init(f"faaskeeper-{service_name}", env["FK_DEPLOYMENT_REGION"])
+        deployment_name = config_json["deployment-name"]
+        gcp_init(f"faaskeeper-{deployment_name}", str(config_json["deployment-region"]),
+                 bucket_name, deployment_name, str(config_json["project-id"]))
         # final_config = aws_config(config_json)
         # logging.info(f"Exporting FaaSKeeper config to {output_config}!")
         # json.dump(final_config, open(output_config, 'w'), indent=2)

@@ -20,7 +20,7 @@ def gcp_globals():
     node_path = "/atest1"
     child_node_path = "/atest1/child1"
     writer_queue = DistributorQueuePubSub("top-cascade-392319", "faasWriter") # worker-queue
-    state_storage = DataStoreDriver(kind_name="faaskeeper-dev-state")
+    state_storage = DataStoreDriver("wide-axiom-402003", kind_name="faaskeeper-dev-state", database="test2")
     version = "-1"
     child_version = "-1"
 

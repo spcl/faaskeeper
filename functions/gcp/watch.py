@@ -8,7 +8,7 @@ from functions.aws.notify import notify
 verbose = bool(os.environ["VERBOSE"])
 deployment_name = f"faaskeeper-{os.environ['DEPLOYMENT_NAME']}"
 region = os.environ["AWS_REGION"]
-region_watches = Watches(deployment_name, region)
+region_watches = Watches(os.environ['PROJECT_ID'], os.environ['DB_NAME'], deployment_name, region)
 
 @functions_framework.http
 def handler(event: dict, context: dict):

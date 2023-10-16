@@ -4,9 +4,9 @@ from google.cloud import datastore
 import google.cloud.exceptions
 
 class DataStoreStorage(Storage):
-    def __init__(self, kind_name: str) -> None:
+    def __init__(self, project_id: str, kind_name: str, database: str) -> None:
         super().__init__(kind_name)
-        self.client = datastore.Client()
+        self.client = datastore.Client(project=project_id, database=database)
         assert self.client is not None
         
     @property

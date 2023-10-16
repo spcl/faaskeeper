@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from collections import namedtuple
 from typing import Tuple, Optional, Set, List
+from os import environ
 
 from faaskeeper.version import SystemCounter, Version
 from faaskeeper.stats import StorageStatistics
@@ -115,11 +116,11 @@ class DataStoreSystemStateStorage(SystemStateStorage):
     '''
     to achieve the same conditonal update in AWS, we use transaction to check the condition
     '''
-    def __init__(self, table_mame_prefix: str) -> None:
+    def __init__(self, project_id: str, table_mame_prefix: str, database: str) -> None:
         #super().__init__()
         # Kind is Table, key is primary key -> faaskeeper-dev
         # key: actual node path -> path
-        self._state_storage = DataStoreDriver(kind_name=f"{table_mame_prefix}-state")
+        self._state_storage = DataStoreDriver( project_id, kind_name=f"{table_mame_prefix}-state", database=database)
         # serializer and deserializer like dynamoDB? looks like no
 
     def lock_node(self, path: str, timestamp: int) -> Tuple[bool, Node]:
@@ -135,7 +136,8 @@ class DataStoreSystemStateStorage(SystemStateStorage):
                     # node does not exist, therefore we upsert here, same with AWS
                     # note that if a node does NOT exist,
                     # the datastore only has (path, timelock)
-                    node = datastore.Entity(node_info.key)
+                    key = local_client.key(self._state_storage.storage_name, path)
+                    node = datastore.Entity(key)
 
                     node.update({
                         "timelock": timestamp

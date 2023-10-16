@@ -4,17 +4,19 @@ from google.cloud import storage
 from faaskeeper.node import Node
 from faaskeeper.version import EpochCounter, SystemCounter, Version
 from faaskeeper.providers.serialization import S3Reader
+from typing import Optional
 
-def init(service_name: str, region: str):
+def init(service_name: str, region: str, bucket_name: Optional[str],
+         deployment_name: Optional[str], project_id: Optional[str]):
     # service_name: faaskeeper-{service_name_in_fk}
     # deployment_name: {service_name_in_fk}
-    bucket_name = os.environ.get("CLOUD_STORAGE_BUCKET")
-    deployment_name = os.environ.get("DEPLOYMENT_NAME")
+    # bucket_name = os.environ.get("CLOUD_STORAGE_BUCKET")
+    # deployment_name = os.environ.get("DEPLOYMENT_NAME")
     cloud_storage_bucket = f"sls-gcp-{deployment_name}-{bucket_name}"
     assert cloud_storage_bucket is not None
     
     # clean up system state table
-    datastore_client = datastore.Client(project=os.environ.get("PROJECT_ID"),database="test2")
+    datastore_client = datastore.Client(project=project_id,database="test2")
     kind_name = f"{service_name}-state"
     # # initialize root
     with datastore_client.transaction():
@@ -26,6 +28,10 @@ def init(service_name: str, region: str):
         })
 
         datastore_client.put(root_node)
+
+        # verify the result using the following url format: 
+        # https://console.cloud.google.com/datastore/databases/{DB_NAME}/entities;kind={KIND_NAME}/query/kind?project={PROJECT_ID}
+
 
     # clean up user state table
     cloud_storage_client = storage.Client()

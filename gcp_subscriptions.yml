@@ -33,6 +33,7 @@ functions: # make changes according to the youtube tutorial
     environment:
       PROJECT_ID: ${self:provider.project}
       CLOUD_STORAGE_BUCKET: ${env:FK_CLOUD_STORAGE_DATA_BUCKET}
+      DB_NAME: ${env:FK_DB_NAME}
       SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
       DEPLOYMENT_NAME: ${env:FK_DEPLOYMENT_NAME}
       GCP_REGION: ${env:FK_DEPLOYMENT_REGION}
@@ -40,7 +41,7 @@ functions: # make changes according to the youtube tutorial
       DISTRIBUTOR_QUEUE: ${env:FK_WORKER_QUEUE}
       USER_STORAGE: ${env:FK_USER_STORAGE}
       VERBOSE: ${env:FK_VERBOSE} # need to be string type in config file
-      DISTRIBUTOR_QUEUE_NAME: faasPubSub    
+      DISTRIBUTOR_QUEUE_NAME: distributor-queue-topic    
 
 resources:
   resources:
@@ -62,6 +63,7 @@ resources:
           environmentVariables:
             PROJECT_ID: ${self:provider.project}
             CLOUD_STORAGE_BUCKET: ${env:FK_CLOUD_STORAGE_DATA_BUCKET}
+            DB_NAME: ${env:FK_DB_NAME}
             SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
             DEPLOYMENT_NAME: ${env:FK_DEPLOYMENT_NAME}
             GCP_REGION: ${env:FK_DEPLOYMENT_REGION}
@@ -69,7 +71,7 @@ resources:
             DISTRIBUTOR_QUEUE: ${env:FK_WORKER_QUEUE}
             USER_STORAGE: ${env:FK_USER_STORAGE}
             VERBOSE: ${env:FK_VERBOSE} # need to be string type in config file
-            DISTRIBUTOR_QUEUE_NAME: faasPubSub
+            DISTRIBUTOR_QUEUE_NAME: distributor-queue-topic
     - name: writer-function-v2
       type: gcp-types/cloudfunctions-v2beta:projects.locations.functions
       properties:
@@ -87,6 +89,7 @@ resources:
           environmentVariables:
             PROJECT_ID: ${self:provider.project}
             CLOUD_STORAGE_BUCKET: ${env:FK_CLOUD_STORAGE_DATA_BUCKET}
+            DB_NAME: ${env:FK_DB_NAME}
             SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
             DEPLOYMENT_NAME: ${env:FK_DEPLOYMENT_NAME}
             GCP_REGION: ${env:FK_DEPLOYMENT_REGION}
@@ -94,7 +97,7 @@ resources:
             DISTRIBUTOR_QUEUE: ${env:FK_WORKER_QUEUE}
             USER_STORAGE: ${env:FK_USER_STORAGE}
             VERBOSE: ${env:FK_VERBOSE} # need to be string type in config file
-            DISTRIBUTOR_QUEUE_NAME: faasPubSub
+            DISTRIBUTOR_QUEUE_NAME: distributor-queue-topic
     - name: distributor-function-v2
       type: gcp-types/cloudfunctions-v2beta:projects.locations.functions
       properties:
@@ -112,6 +115,7 @@ resources:
           environmentVariables:
             PROJECT_ID: ${self:provider.project}
             CLOUD_STORAGE_BUCKET: ${env:FK_CLOUD_STORAGE_DATA_BUCKET}
+            DB_NAME: ${env:FK_DB_NAME}
             SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
             DEPLOYMENT_NAME: ${env:FK_DEPLOYMENT_NAME}
             GCP_REGION: ${env:FK_DEPLOYMENT_REGION}
@@ -119,7 +123,7 @@ resources:
             DISTRIBUTOR_QUEUE: ${env:FK_WORKER_QUEUE}
             USER_STORAGE: ${env:FK_USER_STORAGE}
             VERBOSE: ${env:FK_VERBOSE} # need to be string type in config file
-            DISTRIBUTOR_QUEUE_NAME: faasPubSub
+            DISTRIBUTOR_QUEUE_NAME: distributor-queue-topic
 
     # subscription
     - name: writer-subs
@@ -131,13 +135,17 @@ resources:
         ackDeadlineSeconds: 10
         pushConfig:
           pushEndpoint: https://${env:FK_DEPLOYMENT_REGION}-${env:FK_GCP_PROJECT_ID}.cloudfunctions.net/faaskeeper-${env:FK_DEPLOYMENT_NAME}-writer
+          oidcToken:
+            serviceAccountEmail: ${env:FK_COMPUTE_SERVICE_ACCOUNT}
 
     - name: distributor-subs
       type: gcp-types/pubsub-v1:projects.subscriptions
       properties:
         subscription: distributor-queue-topic
-        topic: projects/${env:FK_GCP_PROJECT_ID}/topics/writer-queue-topic # using ref create dependency
+        topic: projects/${env:FK_GCP_PROJECT_ID}/topics/distributor-queue-topic # using ref create dependency
         enableMessageOrdering: True
         ackDeadlineSeconds: 10
         pushConfig:
           pushEndpoint: https://${env:FK_DEPLOYMENT_REGION}-${env:FK_GCP_PROJECT_ID}.cloudfunctions.net/faaskeeper-${env:FK_DEPLOYMENT_NAME}-distributor
+          oidcToken:
+            serviceAccountEmail: ${env:FK_COMPUTE_SERVICE_ACCOUNT}

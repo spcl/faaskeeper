@@ -27,7 +27,7 @@ epoch_counters: Dict[str, Set[str]] = {}
 config = Config.instance(False)
 
 for r in regions:
-    region_watches[r] = Watches(config.deployment_name, r)
+    region_watches[r] = Watches(os.environ['PROJECT_ID'], os.environ['DB_NAME'], config.deployment_name, r)
     epoch_counters[r] = set()
     region_clients[r] = CloudFunction(r, os.environ["PROJECT_ID"])
 

@@ -9,8 +9,8 @@ class Watches:
 
     Watch_Event = namedtuple("Watch_Event", ["watch_event_type", "watch_type", "node_path", "mFxidSys"])
 
-    def __init__(self, storage_name: str, region: str):
-        self._storage = DataStoreStorage(f"{storage_name}-watch")
+    def __init__(self, project_id: str, database: str,storage_name: str, region: str):
+        self._storage = DataStoreStorage(project_id, f"{storage_name}-watch", database)
         self._region = region
         self._counters = {
             WatchType.GET_DATA: "getData",

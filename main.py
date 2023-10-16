@@ -30,7 +30,7 @@ region_watches: Dict[str, Watches] = {}
 epoch_counters: Dict[str, Set[str]] = {}
 
 for r in regions:
-    region_watches[r] = Watches(config.deployment_name, r)
+    region_watches[r] = Watches(os.environ['PROJECT_ID'], os.environ['DB_NAME'], config.deployment_name, r)
     epoch_counters[r] = set()
     region_clients[r] = CloudFunction(r, os.environ["PROJECT_ID"])
 
@@ -84,7 +84,8 @@ def writer_handler(request):
     if ret:
         if ret["status"] == "failure":
             logging.error(f"Failed processing write event {event_id}: {ret}")
-        config.client_channel.notify(client, ret)
+        # FIXME: TEMP
+        # config.client_channel.notify(client, ret)
 
     return 'OK'
 
@@ -154,25 +155,31 @@ def distributor_handler(request):
 
         if ret:
             # notify client about success
-            config.client_channel.notify(
-                client,
-                ret,
-            )
+            #FIXME: TEMP
+            t = 1
+            # config.client_channel.notify(
+            #     client,
+            #     ret,
+            # )
+            
         else:
-            config.client_channel.notify(
-                client,
-                {"status": "failure", "reason": "distributor failure"},
-            )
+            #FIXME: TEMP
+            t = 1
+            # config.client_channel.notify(
+            #     client,
+            #     {"status": "failure", "reason": "distributor failure"},
+            # )
 
     except Exception:
         print("Failure!")
         import traceback
 
         traceback.print_exc()
-        config.client_channel.notify(
-            client,
-            {"status": "failure", "reason": "distributor failure"},
-        )
+        # FIXME: TEMP
+        # config.client_channel.notify(
+        #     client,
+        #     {"status": "failure", "reason": "distributor failure"},
+        # )
     for f in watches_submitters:
         f.result()
 
