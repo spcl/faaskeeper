@@ -7,7 +7,7 @@ from faaskeeper.providers.serialization import S3Reader
 from typing import Optional
 
 def init(service_name: str, region: str, bucket_name: Optional[str],
-         deployment_name: Optional[str], project_id: Optional[str]):
+         deployment_name: Optional[str], project_id: Optional[str], database: Optional[str]):
     # service_name: faaskeeper-{service_name_in_fk}
     # deployment_name: {service_name_in_fk}
     # bucket_name = os.environ.get("CLOUD_STORAGE_BUCKET")
@@ -16,7 +16,7 @@ def init(service_name: str, region: str, bucket_name: Optional[str],
     assert cloud_storage_bucket is not None
     
     # clean up system state table
-    datastore_client = datastore.Client(project=project_id,database="test2")
+    datastore_client = datastore.Client(project=project_id,database=database)
     kind_name = f"{service_name}-state"
     # # initialize root
     with datastore_client.transaction():

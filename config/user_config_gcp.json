@@ -4,6 +4,7 @@
   "project-id": "wide-axiom-402003",
   "project-credentials": "/home/ubuntu/summer/workingDirectoryMyFork/faaskeeper/config/wide-axiom-402003-5d5c18960a5e.json",
   "default-compute-service-account": "436222241187-compute@developer.gserviceaccount.com",
+  "database-name": "test2",
   "port": 5000,
   "deployment-name": "dev",
   "deployment-region": "us-central1",
