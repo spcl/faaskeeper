@@ -134,10 +134,8 @@ def service(output_config: str, provider: str, config, clean: bool):
 
     elif provider == "gcp":
         # envs specifically to gcp
-        bucket_name = "jncxb1213eqweqqweq11"
         env = {
             **env,
-            "FK_CLOUD_STORAGE_DATA_BUCKET": bucket_name,
             "FK_GCP_PROJECT_ID": str(config_json["project-id"]),
             "FK_GCP_CREDENTIALS": str(config_json["project-credentials"]),
             "FK_COMPUTE_SERVICE_ACCOUNT": str(config_json["default-compute-service-account"]),

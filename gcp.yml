@@ -33,7 +33,7 @@ functions: # make changes according to the youtube tutorial
       - http: path
     environment:
       PROJECT_ID: ${self:provider.project}
-      CLOUD_STORAGE_BUCKET: ${env:FK_CLOUD_STORAGE_DATA_BUCKET}
+      CLOUD_STORAGE_BUCKET: sls-gcp-${self:provider.stage}
       DB_NAME: ${env:FK_DB_NAME}
       SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
       DEPLOYMENT_NAME: ${env:FK_DEPLOYMENT_NAME}
@@ -48,7 +48,7 @@ resources:
   resources:
     # cloud storage
     # double check if the name is globally unique on GCP
-    - name: sls-gcp-${self:provider.stage}-${env:FK_CLOUD_STORAGE_DATA_BUCKET}
+    - name: sls-gcp-${self:provider.stage}
       type: storage.v1.bucket
       properties:
         location: us-central1

@@ -10,9 +10,8 @@ def init(service_name: str, region: str, bucket_name: Optional[str],
          deployment_name: Optional[str], project_id: Optional[str], database: Optional[str]):
     # service_name: faaskeeper-{service_name_in_fk}
     # deployment_name: {service_name_in_fk}
-    # bucket_name = os.environ.get("CLOUD_STORAGE_BUCKET")
     # deployment_name = os.environ.get("DEPLOYMENT_NAME")
-    cloud_storage_bucket = f"sls-gcp-{deployment_name}-{bucket_name}"
+    cloud_storage_bucket = f"sls-gcp-{deployment_name}"
     assert cloud_storage_bucket is not None
     
     # clean up system state table
