@@ -225,7 +225,7 @@ class DataStoreSystemStateStorage(SystemStateStorage):
         local_client = self._state_storage.client
         assert local_client is not None
 
-        success: bool
+        success: bool = True
         
         try:
             with local_client.transaction():
@@ -245,10 +245,12 @@ class DataStoreSystemStateStorage(SystemStateStorage):
                         for property_to_update in to_commit.commit_details:
                             node_info[property_to_update] = to_commit.commit_details[property_to_update]
                         local_client.put(node_info)
+                        return success
         except self._state_storage.errorSupplier.Conflict:
             print("there is a conflict, lock node fails")
             success = False
             return success
+        return False
 
     class CommitNode(NodeWithLock):
         def __init__(self, node: Node, status: NodeWithLock.Status, timelock: NodeWithLock.Lock):

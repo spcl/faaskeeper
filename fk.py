@@ -136,10 +136,11 @@ def service(output_config: str, provider: str, config, clean: bool):
         # envs specifically to gcp
         env = {
             **env,
-            "FK_GCP_PROJECT_ID": str(config_json["project-id"]),
-            "FK_GCP_CREDENTIALS": str(config_json["project-credentials"]),
-            "FK_COMPUTE_SERVICE_ACCOUNT": str(config_json["default-compute-service-account"]),
-            "FK_DB_NAME": str(config_json["database-name"])
+            "FK_GCP_PROJECT_ID": str(config_json["gcp"]["project-id"]),
+            "FK_GCP_CREDENTIALS": str(config_json["gcp"]["project-credentials"]),
+            "FK_COMPUTE_SERVICE_ACCOUNT": str(config_json["gcp"]["default-compute-service-account"]),
+            "FK_DB_NAME": str(config_json["gcp"]["database-name"]),
+            "FK_BUCKET_NAME": str(config_json["gcp"]["bucket-name"])
         }
         res = execute(f"gcloud beta deployment-manager type-providers list --format=json")
         existing_providers = json.loads(res)
@@ -159,6 +160,7 @@ def service(output_config: str, provider: str, config, clean: bool):
         # create a zipped source code
         execute(f"sls package -c {provider}_subscriptions.yml --stage {service_name}", env=env)
         # upload zipped source code into the bucket of function details
+        bucket_name = str(config_json["gcp"]["bucket-name"])
         logging.info(f"Upload source code to the bucket sls-gcp-{service_name}-{bucket_name}")
         execute(f"gcloud storage cp .serverless/faaskeeper-subs.zip gs://sls-gcp-{service_name}-{bucket_name}")
         logging.info(f"Deploy functions in {provider}_subscriptions.yml to provider: {provider}")

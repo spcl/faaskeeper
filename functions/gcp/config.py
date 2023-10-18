@@ -45,9 +45,7 @@ class Config:
         self._user_storage: model.UserStorage
         if self._user_storage_type == Storage.PERSISTENT:
             bucket_name = environ["CLOUD_STORAGE_BUCKET"]
-            deployment_name = environ["DEPLOYMENT_NAME"] 
-            cloud_storage_bucket = f"sls-gcp-{deployment_name}" 
-            self._user_storage = model.CloudStorageStorage(bucket_name=cloud_storage_bucket)
+            self._user_storage = model.CloudStorageStorage(bucket_name=bucket_name)
         else:
             raise RuntimeError("Not implemented!")
         # configure system storage handle

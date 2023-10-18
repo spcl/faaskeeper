@@ -8,12 +8,6 @@ from typing import Optional
 
 def init(service_name: str, region: str, bucket_name: Optional[str],
          deployment_name: Optional[str], project_id: Optional[str], database: Optional[str]):
-    # service_name: faaskeeper-{service_name_in_fk}
-    # deployment_name: {service_name_in_fk}
-    # deployment_name = os.environ.get("DEPLOYMENT_NAME")
-    cloud_storage_bucket = f"sls-gcp-{deployment_name}"
-    assert cloud_storage_bucket is not None
-    
     # clean up system state table
     datastore_client = datastore.Client(project=project_id,database=database)
     kind_name = f"{service_name}-state"
@@ -31,9 +25,9 @@ def init(service_name: str, region: str, bucket_name: Optional[str],
         # verify the result using the following url format: 
         # https://console.cloud.google.com/datastore/databases/{DB_NAME}/entities;kind={KIND_NAME}/query/kind?project={PROJECT_ID}
 
-
     # clean up user state table
     cloud_storage_client = storage.Client()
+    cloud_storage_bucket = f"sls-gcp-{deployment_name}-{bucket_name}"
     cloud_storage_bucket = cloud_storage_client.bucket(cloud_storage_bucket)
     # # initialize root
     root_node = Node("/")

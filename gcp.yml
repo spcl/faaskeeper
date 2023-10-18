@@ -33,7 +33,7 @@ functions: # make changes according to the youtube tutorial
       - http: path
     environment:
       PROJECT_ID: ${self:provider.project}
-      CLOUD_STORAGE_BUCKET: sls-gcp-${self:provider.stage}
+      CLOUD_STORAGE_BUCKET: sls-gcp-${self:provider.stage}-${env:FK_BUCKET_NAME}
       DB_NAME: ${env:FK_DB_NAME}
       SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
       DEPLOYMENT_NAME: ${env:FK_DEPLOYMENT_NAME}
