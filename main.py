@@ -84,8 +84,8 @@ def writer_handler(request):
     if ret:
         if ret["status"] == "failure":
             logging.error(f"Failed processing write event {event_id}: {ret}")
-        # FIXME: TEMP
-        # config.client_channel.notify(client, ret)
+
+        config.client_channel.notify(client, ret)
 
     return 'OK'
 
@@ -155,31 +155,26 @@ def distributor_handler(request):
 
         if ret:
             # notify client about success
-            #FIXME: TEMP
-            t = 1
-            # config.client_channel.notify(
-            #     client,
-            #     ret,
-            # )
+            config.client_channel.notify(
+                client,
+                ret,
+            )
             
         else:
-            #FIXME: TEMP
-            t = 1
-            # config.client_channel.notify(
-            #     client,
-            #     {"status": "failure", "reason": "distributor failure"},
-            # )
+            config.client_channel.notify(
+                client,
+                {"status": "failure", "reason": "distributor failure"},
+            )
 
     except Exception:
         print("Failure!")
         import traceback
 
         traceback.print_exc()
-        # FIXME: TEMP
-        # config.client_channel.notify(
-        #     client,
-        #     {"status": "failure", "reason": "distributor failure"},
-        # )
+        config.client_channel.notify(
+            client,
+            {"status": "failure", "reason": "distributor failure"},
+        )
     for f in watches_submitters:
         f.result()
 

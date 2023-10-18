@@ -111,6 +111,13 @@ class SystemStateStorage(ABC):
     def pop_pending_update(self, node: Node) -> None:
         pass
 
+    @abstractmethod
+    def delete_user(self, session_id: str):
+        """
+        Remove contents stored in the object/row in the storage.
+        """
+        pass
+
 
 class DataStoreSystemStateStorage(SystemStateStorage):
     '''
@@ -120,7 +127,8 @@ class DataStoreSystemStateStorage(SystemStateStorage):
         #super().__init__()
         # Kind is Table, key is primary key -> faaskeeper-dev
         # key: actual node path -> path
-        self._state_storage = DataStoreDriver( project_id, kind_name=f"{table_mame_prefix}-state", database=database)
+        self._state_storage = DataStoreDriver(project_id, kind_name=f"{table_mame_prefix}-state", database=database)
+        self._user_session_storage = DataStoreDriver(project_id, kind_name=f"{table_mame_prefix}-users", database=database)
         # serializer and deserializer like dynamoDB? looks like no
 
     def lock_node(self, path: str, timestamp: int) -> Tuple[bool, Node]:
@@ -446,3 +454,10 @@ class DataStoreSystemStateStorage(SystemStateStorage):
         ret.commit_details = {}
 
         return ret
+
+    def delete_user(self, session_id: str):
+        try:
+            self._user_session_storage.delete(session_id)
+            return True
+        except Exception:
+            return False

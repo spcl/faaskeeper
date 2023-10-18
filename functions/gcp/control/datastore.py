@@ -27,8 +27,9 @@ class DataStoreStorage(Storage):
 
         return node_info
 
-    def delete(self):
-        pass
+    def delete(self, path: str):
+        key = self.client.key(self.storage_name, path)
+        self.client.delete(key)
 
     def _toSchema(self):
         pass
