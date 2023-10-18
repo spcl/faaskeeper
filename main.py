@@ -72,7 +72,6 @@ def writer_handler(request):
     write_event = json.loads(record)
 
     event_id = request_json["message"]["message_id"]
-    write_event["timestamp"] = request_json["message"]["publish_time"]
 
     client = Client.deserialize(write_event)
     op = write_event["op"]

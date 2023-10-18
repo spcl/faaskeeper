@@ -20,7 +20,6 @@ class Watches:
 
     def query_watches(self, node_path: str, counters: List[WatchType]):
         try:
-
             ret, _ = self._storage.read(node_path)
 
             data = []
@@ -35,7 +34,7 @@ class Watches:
                             )
                         )
             return data
-        except self._storage.errorSupplier.ResourceNotFoundException:
+        except Exception:
             return []
 
     def get_watches(self, node_path: str, counters: List[WatchType]):
@@ -62,5 +61,5 @@ class Watches:
                             )
                         )
                 return data
-        except self._storage.errorSupplier.ResourceNotFoundException:
+        except Exception:
             return []

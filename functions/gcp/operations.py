@@ -144,35 +144,35 @@ class CreateNodeExecutor(Executor):
         )
 
     def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
-        assert self._counter
-        assert self._parent_node
-        assert self._parent_timestamp
+        # assert self._counter
+        # assert self._parent_node
+        # assert self._parent_timestamp
 
-        self._node.created = Version(self._counter, None)
-        self._node.modified = Version(self._counter, None)
+        # self._node.created = Version(self._counter, None)
+        # self._node.modified = Version(self._counter, None)
 
-        # For now, distributor handles commit and unlock nodes
-        system_storage.commit_and_unlock_nodes_multi(
-            [
-                system_storage.generate_commit_node(
-                    self._node,
-                    self._timestamp,
-                    set(
-                        [
-                            NodeDataType.CREATED,
-                            NodeDataType.MODIFIED,
-                            NodeDataType.CHILDREN,
-                        ]
-                    ),
-                    self.event_id,
-                ),
-                system_storage.generate_commit_node(
-                    self._parent_node,
-                    self._parent_timestamp,
-                    set([NodeDataType.CHILDREN]),
-                ),
-            ],
-        )
+        # # For now, distributor handles commit and unlock nodes
+        # system_storage.commit_and_unlock_nodes_multi(
+        #     [
+        #         system_storage.generate_commit_node(
+        #             self._node,
+        #             self._timestamp,
+        #             set(
+        #                 [
+        #                     NodeDataType.CREATED,
+        #                     NodeDataType.MODIFIED,
+        #                     NodeDataType.CHILDREN,
+        #                 ]
+        #             ),
+        #             self.event_id,
+        #         ),
+        #         system_storage.generate_commit_node(
+        #             self._parent_node,
+        #             self._parent_timestamp,
+        #             set([NodeDataType.CHILDREN]),
+        #         ),
+        #     ],
+        # )
 
         return (True, {})
 
@@ -266,28 +266,28 @@ class SetDataExecutor(Executor):
             self._stats.add_result("push", end_push - begin_push)
 
     def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
-        assert self._node
-        assert self._timestamp
-        assert self._counter
+        # assert self._node
+        # assert self._timestamp
+        # assert self._counter
 
-        begin_commit = time.time()
-        self._node.modified = Version(self._counter, None)
+        # begin_commit = time.time()
+        # self._node.modified = Version(self._counter, None)
 
-        system_storage.commit_and_unlock_node(
-            self._node,
-            self._timestamp,
-            set([NodeDataType.MODIFIED]),
-            self.event_id
-        )
+        # system_storage.commit_and_unlock_node(
+        #     self._node,
+        #     self._timestamp,
+        #     set([NodeDataType.MODIFIED]),
+        #     self.event_id
+        # )
 
-        end_commit = time.time()
-        if self._config.benchmarking:
-            self._stats.add_result("commit", end_commit - begin_commit)
+        # end_commit = time.time()
+        # if self._config.benchmarking:
+        #     self._stats.add_result("commit", end_commit - begin_commit)
 
-        if self._config.benchmarking:
-            end = time.time()
-            self._stats.add_result("total", end - self._begin)
-            self._stats.add_repetition()
+        # if self._config.benchmarking:
+        #     end = time.time()
+        #     self._stats.add_result("total", end - self._begin)
+        #     self._stats.add_repetition()
 
         return (True, {})
 
@@ -380,25 +380,25 @@ class DeleteNodeExecutor(Executor):
 
     def commit_and_unlock(self, system_storage: SystemStorage) -> Tuple[bool, dict]:
 
-        assert self._node
-        assert self._timestamp
-        assert self._parent_node
-        assert self._parent_timestamp
+        # assert self._node
+        # assert self._timestamp
+        # assert self._parent_node
+        # assert self._parent_timestamp
 
-        system_storage.commit_and_unlock_nodes_multi(
-            [
-                system_storage.generate_commit_node(
-                    self._parent_node,
-                    self._parent_timestamp,
-                    set([NodeDataType.CHILDREN]),
-                ),
-            ],
-            [
-                system_storage.generate_delete_node(
-                    self._node, self._timestamp, self.event_id
-                ),
-            ]
-        )
+        # system_storage.commit_and_unlock_nodes_multi(
+        #     [
+        #         system_storage.generate_commit_node(
+        #             self._parent_node,
+        #             self._parent_timestamp,
+        #             set([NodeDataType.CHILDREN]),
+        #         ),
+        #     ],
+        #     [
+        #         system_storage.generate_delete_node(
+        #             self._node, self._timestamp, self.event_id
+        #         ),
+        #     ]
+        # )
 
         return (True, {})
 

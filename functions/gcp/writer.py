@@ -21,9 +21,9 @@ def execute_operation(op_exec: Executor, client: Client) -> Optional[dict]:
         op_exec.distributor_push(client, config.distributor_queue)
 
         # TODO: in gcp for now , we now let distributor do the commit work
-        # status, ret = op_exec.commit_and_unlock(config.system_storage)
-        # if not status: # status == False
-        #     return ret
+        status, ret = op_exec.commit_and_unlock(config.system_storage)
+        if not status: # status == False
+            return ret
         
         return ret
 
@@ -43,7 +43,6 @@ def handler(request):
     write_event = json.loads(record)
 
     event_id = request_json["message"]["message_id"]
-    write_event["timestamp"] = request_json["message"]["publish_time"]
 
     client = Client.deserialize(write_event)
     op = write_event["op"]
