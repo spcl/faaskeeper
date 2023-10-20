@@ -10,6 +10,7 @@ provider:
   # the path to the credentials file needs to be absolute
   credentials: ${env:FK_GCP_CREDENTIALS}
   environment:
+    CLOUD_FUNCTION_MIN_INSTANCE: 0
     CLOUD_FUNCTION_MAX_INSTANCE: 10
 
 plugins:
@@ -59,6 +60,7 @@ resources:
           entryPoint: watch_handler
           runtime: python38
         serviceConfig:
+          minInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MIN_INSTANCE}
           maxInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MAX_INSTANCE}
           environmentVariables:
             PROJECT_ID: ${self:provider.project}
@@ -72,6 +74,7 @@ resources:
             USER_STORAGE: ${env:FK_USER_STORAGE}
             VERBOSE: ${env:FK_VERBOSE} # need to be string type in config file
             DISTRIBUTOR_QUEUE_NAME: distributor-queue-topic
+            BENCHMARKING: ${env:FK_FUNCTION_BENCHMARKING}
     - name: writer-function-v2
       type: gcp-types/cloudfunctions-v2beta:projects.locations.functions
       properties:
@@ -85,6 +88,7 @@ resources:
           entryPoint: writer_handler
           runtime: python38
         serviceConfig:
+          minInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MIN_INSTANCE}
           maxInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MAX_INSTANCE}
           environmentVariables:
             PROJECT_ID: ${self:provider.project}
@@ -98,6 +102,7 @@ resources:
             USER_STORAGE: ${env:FK_USER_STORAGE}
             VERBOSE: ${env:FK_VERBOSE} # need to be string type in config file
             DISTRIBUTOR_QUEUE_NAME: distributor-queue-topic
+            BENCHMARKING: ${env:FK_FUNCTION_BENCHMARKING}
     - name: distributor-function-v2
       type: gcp-types/cloudfunctions-v2beta:projects.locations.functions
       properties:
@@ -111,6 +116,7 @@ resources:
           entryPoint: distributor_handler
           runtime: python38
         serviceConfig:
+          minInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MIN_INSTANCE}
           maxInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MAX_INSTANCE}
           environmentVariables:
             PROJECT_ID: ${self:provider.project}
@@ -124,6 +130,7 @@ resources:
             USER_STORAGE: ${env:FK_USER_STORAGE}
             VERBOSE: ${env:FK_VERBOSE} # need to be string type in config file
             DISTRIBUTOR_QUEUE_NAME: distributor-queue-topic
+            BENCHMARKING: ${env:FK_FUNCTION_BENCHMARKING}
 
     # subscription
     - name: writer-subs

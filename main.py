@@ -51,9 +51,9 @@ def execute_operation(op_exec: Executor, client: Client) -> Optional[dict]:
         op_exec.distributor_push(client, config.distributor_queue)
 
         # TODO: in gcp for now , we now let distributor do the commit work
-        # status, ret = op_exec.commit_and_unlock(config.system_storage)
-        # if not status: # status == False
-        #     return ret
+        status, ret = op_exec.commit_and_unlock(config.system_storage)
+        if not status: # status == False
+            return ret
         
         return ret
 
@@ -83,7 +83,6 @@ def writer_handler(request):
     if ret:
         if ret["status"] == "failure":
             logging.error(f"Failed processing write event {event_id}: {ret}")
-
         config.client_channel.notify(client, ret)
 
     return 'OK'
@@ -122,7 +121,16 @@ def distributor_handler(request):
     write_event = json.loads(record)
     event_type = DistributorEventType(int(write_event["type"]))
 
-    publish_time = datetime.strptime(request_json["message"]["publishTime"], "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%Y%m%d%H%M%S%f")
+    # multiple
+    publish_time = None
+    for format in (("%Y-%m-%dT%H:%M:%S.%fZ", "%Y%m%d%H%M%S%f"), ("%Y-%m-%dT%H:%M:%SZ","%Y%m%d%H%M%S%f")):
+        try:
+            publish_time = datetime.strptime(request_json["message"]["publishTime"], format[0]).strftime(format[1])
+        except ValueError:
+            pass
+    if publish_time is None:
+        pt = request_json["message"]["publishTime"]
+        raise ValueError(f"Non-valid date format for'{pt}'")
     counter: SystemCounter = SystemCounter.from_raw_data([int(publish_time[:-3])])
     try:
         client = Client.deserialize(write_event)
@@ -133,8 +141,10 @@ def distributor_handler(request):
                 config.system_storage, config.user_storage, epoch_counters[r], counter
             )
         end_write = time.time()
-        timing_stats.add_result("write", end_write - begin_write)
-
+        if event_type == DistributorEventType.SET_DATA:
+            timing_stats.add_result("write set", end_write - begin_write)
+        elif event_type == DistributorEventType.CREATE_NODE:
+            timing_stats.add_result("write create", end_write - begin_write)
         # start watch delivery
         for r in regions:
             for watch in operation.generate_watches_event(region_watches[r]):

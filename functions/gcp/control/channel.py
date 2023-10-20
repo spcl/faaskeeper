@@ -76,8 +76,13 @@ class ClientChannelTCP(ClientChannel):
         if sock is None:
             logging.error(f"Notification of client {user} failed!")
             return
-
         try:
             sock.sendall(json.dumps({**ret, "event": user.timestamp}).encode())
         except socket.timeout:
             logging.error(f"Notification of client {user} failed!")
+        except BrokenPipeError:
+            print("BrokenPipeError connection closed on the other end")
+            logging.error("BrokenPipeError connection closed on the other end")
+        except Exception:
+            print("General exception")
+            logging.error("General exception")

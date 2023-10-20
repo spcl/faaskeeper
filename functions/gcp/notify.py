@@ -1,5 +1,6 @@
 import json
 import socket
+import requests
 
 
 def notify(ip: str, port: int, msg: dict):
@@ -11,3 +12,7 @@ def notify(ip: str, port: int, msg: dict):
             s.sendall(json.dumps(msg).encode())
         except socket.timeout:
             print(f"Notification of client {ip}:{port} failed!")
+        except BrokenPipeError:
+            print("BrokenPipeError connection closed on the other end")
+        except Exception:
+            print("General exception")

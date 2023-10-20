@@ -447,6 +447,7 @@ class DistributorSetData(DistributorEvent):
         epoch_counters: Set[str],
         system_counter,
     ) -> Optional[dict]:
+        print("benchmark set?", self._config.benchmarking)
         if self._config.benchmarking:
             begin_read = time.time()
         system_node = system_storage.read_node(self.node)
@@ -463,8 +464,6 @@ class DistributorSetData(DistributorEvent):
 
             logging.error("Failing to apply the update - node still locked")
             self.set_system_counter(system_counter)
-            print("set_data commit",self.node.modified.system._version, self.node.modified.system, self.node, self.node.modified)
-            print("new place", type(self))
             commit_status = system_storage.commit_and_unlock_node(
                 self.node,
                 self.lock_timestamp,
@@ -484,8 +483,7 @@ class DistributorSetData(DistributorEvent):
                     }
         if self._config.benchmarking:
             end_read = time.time()
-            self._timing_stats.add_result("exec_read", end_read - begin_read)
-
+            self._timing_stats.add_result("exec_read datastore", end_read - begin_read)
         """
         On DynamoDB we skip updating the created version as it doesn't change.
         On S3, we need to write this every single time.
@@ -496,7 +494,7 @@ class DistributorSetData(DistributorEvent):
         user_storage.update(self.node, set([NodeDataType.MODIFIED, NodeDataType.DATA]))
         if self._config.benchmarking:
             end_write = time.time()
-            self._timing_stats.add_result("exec_update", end_write - begin_write)
+            self._timing_stats.add_result("exec_update cloud storage", end_write - begin_write)
 
         if self._config.benchmarking:
             begin_pop = time.time()
