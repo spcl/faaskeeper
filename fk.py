@@ -10,6 +10,7 @@ import click
 
 from functions.aws.init import init as aws_init, clean as aws_clean, config as aws_config
 from functions.gcp.init import init as gcp_init
+from concurrent.futures import Future, ThreadPoolExecutor
 
 def get_env(config_json: dict) -> dict:
 
@@ -97,6 +98,16 @@ def export(ctx, provider: str, config):
         logging.error("Export env didn't succeed!")
         logging.error(e)
 
+def upload_cloud_func(func_name: str, function_names: list, bucket_name: str, service_name: str):
+    exclude_funcs = ""
+    for f in function_names:
+        if f != func_name:
+            exclude_funcs += f"functions/gcp/{f}.py "
+    execute(f"zip -r faaskeeper-subs-{func_name}.zip requirements.txt functions/gcp/ -x {exclude_funcs} functions/gcp/tests\* **pycache** **pytest_cache**")
+    execute(f"printf '@ {func_name}.py\n@=main.py\n' | zipnote -w faaskeeper-subs-{func_name}.zip")
+    execute(f"gcloud storage cp faaskeeper-subs-{func_name}.zip gs://sls-gcp-{service_name}-{bucket_name}")
+    execute(f"rm -f faaskeeper-subs-{func_name}.zip")
+
 @deploy.command()
 @click.argument("output_config")
 @common_params
@@ -157,23 +168,17 @@ def service(output_config: str, provider: str, config, clean: bool):
             execute(f"sls deploy --stage {service_name} -c {provider}.yml", env=env)
         except Exception:
             logging.error("Check if it is the database OAuth token expiry issue")
-        # create a zipped source code for writer
-        execute(f"zip -r faaskeeper-subs-writer.zip requirements.txt functions/gcp/ -x functions/gcp/watch.py functions/gcp/distributor.py functions/gcp/tests\* **pycache** **pytest_cache**")
-        execute("printf '@ writer.py\n@=main.py\n' | zipnote -w faaskeeper-subs-writer.zip")
-        # create a zipped source code for distributor
-        execute(f"zip -r faaskeeper-subs-distributor.zip requirements.txt functions/gcp/ -x functions/gcp/watch.py functions/gcp/writer.py functions/gcp/tests\* **pycache** **pytest_cache**")
-        execute("printf '@ distributor.py\n@=main.py\n' | zipnote -w faaskeeper-subs-distributor.zip")
-        # create a zipped source code for watch
-        execute(f"zip -r faaskeeper-subs-watch.zip requirements.txt functions/gcp/ -x functions/gcp/writer.py functions/gcp/distributor.py functions/gcp/tests\* **pycache** **pytest_cache**")
-        execute("printf '@ watch.py\n@=main.py\n' | zipnote -w faaskeeper-subs-watch.zip")
-        # upload zipped source code into the bucket of function details
-        bucket_name = str(config_json["gcp"]["bucket-name"])
-        logging.info(f"Upload source code to the bucket sls-gcp-{service_name}-{bucket_name}")
-        execute(f"gcloud storage cp faaskeeper-subs-writer.zip gs://sls-gcp-{service_name}-{bucket_name}")
-        execute(f"gcloud storage cp faaskeeper-subs-distributor.zip gs://sls-gcp-{service_name}-{bucket_name}")
-        execute(f"gcloud storage cp faaskeeper-subs-watch.zip gs://sls-gcp-{service_name}-{bucket_name}")
         
-        execute("rm -f faaskeeper-subs-writer.zip faaskeeper-subs-distributor.zip faaskeeper-subs-watch.zip")
+        bucket_name = str(config_json["gcp"]["bucket-name"])
+        futures: list[Future] = []
+        function_names = ["writer", "distributor", "watch"]
+        with ThreadPoolExecutor(max_workers=len(function_names)) as executor:
+            for func in function_names:
+                futures.append(executor.submit(upload_cloud_func, func, function_names, bucket_name, service_name))
+        
+        for f in futures:
+            f.result()
+            
         logging.info(f"Deploy functions in {provider}_subscriptions.yml to provider: {provider}")
         execute(f"sls deploy --stage {service_name} -c {provider}_subscriptions.yml", env=env)
         deployment_name = config_json["deployment-name"]
