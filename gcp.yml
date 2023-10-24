@@ -32,7 +32,7 @@ resources:
   resources:
     # cloud storage
     # double check if the name is globally unique on GCP
-    - name: sls-gcp-${self:provider.stage}
+    - name: sls-gcp-${self:provider.stage}-${env:FK_BUCKET_NAME}
       type: storage.v1.bucket
       properties:
         location: us-central1

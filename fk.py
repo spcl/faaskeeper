@@ -104,7 +104,7 @@ def upload_cloud_func(func_name: str, function_names: list, bucket_name: str, se
         if f != func_name:
             exclude_funcs += f"functions/gcp/{f}.py "
     execute(f"zip -r faaskeeper-subs-{func_name}.zip requirements.txt functions/gcp/ -x {exclude_funcs} functions/gcp/tests\* **pycache** **pytest_cache**")
-    execute(f"printf '@ {func_name}.py\n@=main.py\n' | zipnote -w faaskeeper-subs-{func_name}.zip")
+    execute(f"printf '@ functions/gcp/{func_name}.py\n@=main.py\n' | zipnote -w faaskeeper-subs-{func_name}.zip", shell=True)
     execute(f"gcloud storage cp faaskeeper-subs-{func_name}.zip gs://sls-gcp-{service_name}-{bucket_name}")
     execute(f"rm -f faaskeeper-subs-{func_name}.zip")
 
@@ -172,18 +172,18 @@ def service(output_config: str, provider: str, config, clean: bool):
         bucket_name = str(config_json["gcp"]["bucket-name"])
         futures: list[Future] = []
         function_names = ["writer", "distributor", "watch"]
+        logging.info(f"Upload source code to the bucket sls-gcp-{service_name}-{bucket_name}")
         with ThreadPoolExecutor(max_workers=len(function_names)) as executor:
             for func in function_names:
                 futures.append(executor.submit(upload_cloud_func, func, function_names, bucket_name, service_name))
         
         for f in futures:
             f.result()
-            
         logging.info(f"Deploy functions in {provider}_subscriptions.yml to provider: {provider}")
         execute(f"sls deploy --stage {service_name} -c {provider}_subscriptions.yml", env=env)
         deployment_name = config_json["deployment-name"]
         gcp_init(f"faaskeeper-{deployment_name}", str(config_json["deployment-region"]),
-                 bucket_name, deployment_name, str(config_json["project-id"]), str(config_json["database-name"]))
+                 bucket_name, deployment_name, str(config_json["gcp"]["project-id"]), str(config_json["gcp"]["database-name"]))
         # final_config = aws_config(config_json)
         # logging.info(f"Exporting FaaSKeeper config to {output_config}!")
         # json.dump(final_config, open(output_config, 'w'), indent=2)
