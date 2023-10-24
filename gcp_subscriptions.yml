@@ -18,10 +18,6 @@ plugins:
 package:
   patterns:
     - '!**'
-    - 'functions/gcp/**'
-    - '!functions/gcp/tests/**'
-    - '!functions/gcp/.pytest_cache/**'
-    - '!functions/gcp/__pycache__/**'
     - 'main.py'
     - 'requirements.txt'
 
@@ -31,18 +27,6 @@ functions: # make changes according to the youtube tutorial
     handler: dummy_http_function
     events:
       - http: path
-    environment:
-      PROJECT_ID: ${self:provider.project}
-      CLOUD_STORAGE_BUCKET: sls-gcp-${self:provider.stage}-${env:FK_BUCKET_NAME}
-      DB_NAME: ${env:FK_DB_NAME}
-      SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
-      DEPLOYMENT_NAME: ${env:FK_DEPLOYMENT_NAME}
-      GCP_REGION: ${env:FK_DEPLOYMENT_REGION}
-      CLIENT_CHANNEL: ${env:FK_CLIENT_CHANNEL}
-      DISTRIBUTOR_QUEUE: ${env:FK_WORKER_QUEUE}
-      USER_STORAGE: ${env:FK_USER_STORAGE}
-      VERBOSE: ${env:FK_VERBOSE} # need to be string type in config file
-      DISTRIBUTOR_QUEUE_NAME: distributor-queue-topic    
 
 resources:
   resources:
@@ -56,8 +40,8 @@ resources:
           source:
             storageSource:
               bucket: sls-gcp-${self:provider.stage}-${env:FK_BUCKET_NAME}
-              object: ${self:service}.zip
-          entryPoint: watch_handler
+              object: ${self:service}-watch.zip
+          entryPoint: handler
           runtime: python38
         serviceConfig:
           minInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MIN_INSTANCE}
@@ -84,8 +68,8 @@ resources:
           source:
             storageSource:
               bucket: sls-gcp-${self:provider.stage}-${env:FK_BUCKET_NAME}
-              object: ${self:service}.zip
-          entryPoint: writer_handler
+              object: ${self:service}-writer.zip
+          entryPoint: handler
           runtime: python38
         serviceConfig:
           minInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MIN_INSTANCE}
@@ -112,8 +96,8 @@ resources:
           source:
             storageSource:
               bucket: sls-gcp-${self:provider.stage}-${env:FK_BUCKET_NAME}
-              object: ${self:service}.zip
-          entryPoint: distributor_handler
+              object: ${self:service}-distributor.zip
+          entryPoint: handler
           runtime: python38
         serviceConfig:
           minInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MIN_INSTANCE}

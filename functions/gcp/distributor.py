@@ -3,8 +3,8 @@ import base64
 import json
 import time
 import hashlib
-import os
 
+from os import environ
 from typing import Dict, List, Set
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
@@ -27,9 +27,9 @@ epoch_counters: Dict[str, Set[str]] = {}
 config = Config.instance(False)
 
 for r in regions:
-    region_watches[r] = Watches(os.environ['PROJECT_ID'], os.environ['DB_NAME'], config.deployment_name, r)
+    region_watches[r] = Watches(environ['PROJECT_ID'], environ['DB_NAME'], config.deployment_name, r)
     epoch_counters[r] = set()
-    region_clients[r] = CloudFunction(r, os.environ["PROJECT_ID"])
+    region_clients[r] = CloudFunction(r, environ["PROJECT_ID"])
 
 timing_stats = TimingStatistics.instance()
 
@@ -46,6 +46,7 @@ def launch_watcher(operation: DistributorEvent, region: str, json_in: dict):
         FunctionName=f"{config.deployment_name}-watch",
         Payload=json.dumps(json_in).encode(),
     )
+    is_delivered = bool(is_delivered)
 
     if is_delivered:
         hashed_path = hashlib.md5(json_in["path"].encode()).hexdigest()
@@ -69,7 +70,16 @@ def handler(request):
     write_event = json.loads(record)
     event_type = DistributorEventType(int(write_event["type"]))
 
-    publish_time = datetime.strptime(request_json["message"]["publishTime"], "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%Y%m%d%H%M%S%f")
+    # multiple
+    publish_time = None
+    for format in (("%Y-%m-%dT%H:%M:%S.%fZ", "%Y%m%d%H%M%S%f"), ("%Y-%m-%dT%H:%M:%SZ","%Y%m%d%H%M%S%f")):
+        try:
+            publish_time = datetime.strptime(request_json["message"]["publishTime"], format[0]).strftime(format[1])
+        except ValueError:
+            pass
+    if publish_time is None:
+        pt = request_json["message"]["publishTime"]
+        raise ValueError(f"Non-valid date format for'{pt}'")
     counter: SystemCounter = SystemCounter.from_raw_data([int(publish_time[:-3])])
     try:
         client = Client.deserialize(write_event)
@@ -80,8 +90,10 @@ def handler(request):
                 config.system_storage, config.user_storage, epoch_counters[r], counter
             )
         end_write = time.time()
-        timing_stats.add_result("write", end_write - begin_write)
-
+        if event_type == DistributorEventType.SET_DATA:
+            timing_stats.add_result("write set", end_write - begin_write)
+        elif event_type == DistributorEventType.CREATE_NODE:
+            timing_stats.add_result("write create", end_write - begin_write)
         # start watch delivery
         for r in regions:
             for watch in operation.generate_watches_event(region_watches[r]):
@@ -105,6 +117,7 @@ def handler(request):
                 client,
                 ret,
             )
+            
         else:
             config.client_channel.notify(
                 client,

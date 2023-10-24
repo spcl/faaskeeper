@@ -157,12 +157,23 @@ def service(output_config: str, provider: str, config, clean: bool):
             execute(f"sls deploy --stage {service_name} -c {provider}.yml", env=env)
         except Exception:
             logging.error("Check if it is the database OAuth token expiry issue")
-        # create a zipped source code
-        execute(f"sls package -c {provider}_subscriptions.yml --stage {service_name}", env=env)
+        # create a zipped source code for writer
+        execute(f"zip -r faaskeeper-subs-writer.zip requirements.txt functions/gcp/ -x functions/gcp/watch.py functions/gcp/distributor.py functions/gcp/tests\* **pycache** **pytest_cache**")
+        execute("printf '@ writer.py\n@=main.py\n' | zipnote -w faaskeeper-subs-writer.zip")
+        # create a zipped source code for distributor
+        execute(f"zip -r faaskeeper-subs-distributor.zip requirements.txt functions/gcp/ -x functions/gcp/watch.py functions/gcp/writer.py functions/gcp/tests\* **pycache** **pytest_cache**")
+        execute("printf '@ distributor.py\n@=main.py\n' | zipnote -w faaskeeper-subs-distributor.zip")
+        # create a zipped source code for watch
+        execute(f"zip -r faaskeeper-subs-watch.zip requirements.txt functions/gcp/ -x functions/gcp/writer.py functions/gcp/distributor.py functions/gcp/tests\* **pycache** **pytest_cache**")
+        execute("printf '@ watch.py\n@=main.py\n' | zipnote -w faaskeeper-subs-watch.zip")
         # upload zipped source code into the bucket of function details
         bucket_name = str(config_json["gcp"]["bucket-name"])
         logging.info(f"Upload source code to the bucket sls-gcp-{service_name}-{bucket_name}")
-        execute(f"gcloud storage cp .serverless/faaskeeper-subs.zip gs://sls-gcp-{service_name}-{bucket_name}")
+        execute(f"gcloud storage cp faaskeeper-subs-writer.zip gs://sls-gcp-{service_name}-{bucket_name}")
+        execute(f"gcloud storage cp faaskeeper-subs-distributor.zip gs://sls-gcp-{service_name}-{bucket_name}")
+        execute(f"gcloud storage cp faaskeeper-subs-watch.zip gs://sls-gcp-{service_name}-{bucket_name}")
+        
+        execute("rm -f faaskeeper-subs-writer.zip faaskeeper-subs-distributor.zip faaskeeper-subs-watch.zip")
         logging.info(f"Deploy functions in {provider}_subscriptions.yml to provider: {provider}")
         execute(f"sls deploy --stage {service_name} -c {provider}_subscriptions.yml", env=env)
         deployment_name = config_json["deployment-name"]
