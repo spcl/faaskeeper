@@ -50,6 +50,10 @@ clientAPIMapping = {
     "close": "stop",
     "connect": "start",
 }
+CMD_KWARGS = {
+    "create": [{"-e", "--ephemeral"}, {"-s", "--sequence"}],
+    # add more commands format here for parsing
+}
 
 fkCompleter = WordCompleter(keywords, ignore_case=True)
 
@@ -137,6 +141,25 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
     return client.session_status, client.session_id
 
 
+def parse_args(cmd: str, args: List[str]):
+    if cmd not in CMD_KWARGS:
+        return args
+    else:
+        parsed_args = []
+        parsed_kwargs = [False] * len(CMD_KWARGS[cmd])
+        for arg in args:
+            is_kwarg = False
+            for idx, kwarg in enumerate(CMD_KWARGS[cmd]):
+                if arg in kwarg:
+                    parsed_kwargs[idx] = True
+                    is_kwarg = True
+                    break
+            if not is_kwarg:
+                parsed_args.append(arg)
+        parsed_args.extend(parsed_kwargs)
+        return parsed_args
+
+
 @click.command()
 @click.argument("config", type=click.File("r"))
 @click.option("--port", type=int, default=-1)
@@ -190,7 +213,8 @@ def cli(config, port: int, verbose: str):
         elif cmd not in keywords:
             click.echo(f"Unknown command {text}")
         else:
-            status, session_id = process_cmd(client, cmd, cmds[1:])
+            args = parse_args(cmd, cmds[1:])
+            status, session_id = process_cmd(client, cmd, args)
         counter += 1
 
     print("Closing...")
