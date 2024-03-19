@@ -13,7 +13,7 @@ To use a deployed FaaSKeeper instance, check our Python client library: [spcl/fa
 
 ## Dependencies
 
-* Python >= 3.6
+* Python >= 3.7
 * Node.js **<= 15.4.0**
 * Cloud credentials to deploy the service
 
@@ -139,7 +139,6 @@ Triggered by delete on the node and `create` and `delete` on its children.
 To detect if the watch is not set on an older version of the node, we
 use the `children` timestamp.
 
-
 ## Development
 
 We use `black` and `flake8` for code linting. Before commiting and pushing changes,
@@ -152,4 +151,5 @@ The linting helper `tools/linting.py` includes a call to `mypy` to check for sta
 ## Authors
 
 * [Marcin Copik (ETH Zurich)](https://github.com/mcopik/) - main author.
+* [Pengyu Zhou (University of Toronto)](https://github.com/EricPyZhou) - Google Cloud port and various fixes.
 * [Ziad Hany](https://github.com/ziadhany) - SQS client channel.
