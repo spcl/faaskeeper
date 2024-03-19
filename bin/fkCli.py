@@ -50,10 +50,32 @@ clientAPIMapping = {
     "close": "stop",
     "connect": "start",
 }
-CMD_KWARGS = {
-    "create": [{"-e", "--ephemeral"}, {"-s", "--sequence"}],
-    # add more commands format here for parsing
+# argument should be a string
+ARGS = {
+    "path": "/path:str",
+    "data": "data:str",
 }
+
+# flag should be a set of its representations (strings)
+KWARGS = {
+    "ephemeral": {"-e", "--ephemeral"},
+    "sequence": {"-s", "--sequence"},
+    "boolean1": {"-b1", "--boolean1"},
+    "boolean2": {"-b2", "--boolean2"},
+}
+
+# program can distinguish kwarg and arg by their type
+CMD = {
+    # create /test 0x0 False False
+    "create": [ARGS["path"], ARGS["data"], KWARGS["ephemeral"], KWARGS["sequence"]],  
+    # test /test False True 0x0
+    "test": [ARGS["path"], KWARGS["boolean1"], KWARGS["boolean2"], ARGS["data"]],
+
+    # add more commands format here for parsing...
+}
+# parse status code
+PARSE_SUCCESS = 1
+PARSE_ERROR = 0
 
 fkCompleter = WordCompleter(keywords, ignore_case=True)
 
@@ -141,23 +163,44 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
     return client.session_status, client.session_id
 
 
+# find the position of the argument in the command (function call like), return -1 if the argument is not a flag
+def kwarg_pos(arg: str, kwargs_array: List[str]):
+    for idx, kwarg in enumerate(kwargs_array):
+        if (type(kwarg) is set) and (arg in kwarg):
+            return idx
+    return -1
+
+# print the command format and flags to user
+def print_cmd_info(cmd: str):
+    args = ""
+    flags = ""
+    for arg in CMD[cmd]:
+        if type(arg) is str:
+            args += f"{arg} "
+        else:
+            flags += f"{arg} "
+    click.echo(f"Command: {args}| Flags: {flags}")
+
+
+# parse the arguments and return the parsed arguments
+# status code: 0 - success, 1 - not need to parse, 2 - error  
 def parse_args(cmd: str, args: List[str]):
-    if cmd not in CMD_KWARGS:
-        return args
+    if cmd not in CMD:
+        return args, PARSE_SUCCESS
     else:
-        parsed_args = []
-        parsed_kwargs = [False] * len(CMD_KWARGS[cmd])
-        for arg in args:
-            is_kwarg = False
-            for idx, kwarg in enumerate(CMD_KWARGS[cmd]):
-                if arg in kwarg:
-                    parsed_kwargs[idx] = True
-                    is_kwarg = True
-                    break
-            if not is_kwarg:
-                parsed_args.append(arg)
-        parsed_args.extend(parsed_kwargs)
-        return parsed_args
+        parsed_args = [False] * len(CMD[cmd])
+        arg_idx = parse_args_idx = 0
+        while arg_idx < len(args):
+            idx = kwarg_pos(args[arg_idx], CMD[cmd])
+            if idx != -1:
+                parsed_args[idx] = True
+            else:
+                while isinstance(CMD[cmd][parse_args_idx], set): # skip the positions for flags
+                    parse_args_idx += 1
+                parsed_args[parse_args_idx] = args[arg_idx]
+                parse_args_idx += 1
+            arg_idx += 1
+    return parsed_args, PARSE_SUCCESS
 
 
 @click.command()
@@ -213,8 +256,9 @@ def cli(config, port: int, verbose: str):
         elif cmd not in keywords:
             click.echo(f"Unknown command {text}")
         else:
-            args = parse_args(cmd, cmds[1:])
-            status, session_id = process_cmd(client, cmd, args)
+            print(cmd, cmds[1:])
+            parsed_args = parse_args(cmd, cmds[1:])
+            status, session_id = process_cmd(client, cmd, parsed_args)
         counter += 1
 
     print("Closing...")
