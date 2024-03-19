@@ -95,7 +95,7 @@ We use key-value tables to store system data, user store, and to function as que
 
 #### Functions
 
-We create four basic functions: `heartbeat`, `watch`, `writer` and `distributor`. Users invoke `witer` indirectly via a queue or a table to proces a write request, and this function in turn invokes `distributor` and `watch` to process updated data nad new watch events. Heartbeat is invoked periodically by the system.
+We create four basic functions: `heartbeat`, `watch`, `writer` and `distributor`. Users invoke `writer` indirectly via a queue or a table to proces a write request, and this function in turn invokes `distributor` and `watch` to process updated data nad new watch events. Heartbeat is invoked periodically by the system.
 
 #### Communication
 
