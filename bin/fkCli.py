@@ -54,28 +54,38 @@ clientAPIMapping = {
 ARGS = {
     "path": "/path:str",
     "data": "data:str",
+    "version": "version:int",
 }
 
 # flag should be a set of its representations (strings)
 KWARGS = {
     "ephemeral": {"-e", "--ephemeral"},
     "sequence": {"-s", "--sequence"},
-    "boolean1": {"-b1", "--boolean1"},
-    "boolean2": {"-b2", "--boolean2"},
+    "watch": {"-w", "--watch"},
+    "includeData": {"-i", "--includeData"},
 }
 
 # program can distinguish kwarg and arg by their type
 CMD = {
     # create /test 0x0 False False
     "create": [ARGS["path"], ARGS["data"], KWARGS["ephemeral"], KWARGS["sequence"]],  
-    # test /test False True 0x0
-    "test": [ARGS["path"], KWARGS["boolean1"], KWARGS["boolean2"], ARGS["data"]],
-
-    # add more commands format here for parsing...
+    "get": [ARGS["path"], KWARGS["watch"]],
+    "set": [ARGS["path"], ARGS["data"], ARGS["version"]],
+    "delete": [ARGS["path"], ARGS["version"]],
+    "exists": [ARGS["path"]],
+    "help": [],
+    "getChildren": [ARGS["path"], KWARGS["includeData"]],
 }
-# parse status code
-PARSE_SUCCESS = 1
-PARSE_ERROR = 0
+
+INPUT_FORMAT = {
+    "create": "create -e -s /test 0x0",
+    "get": "get -w /test",
+    "set": "set /test 0x0 -1",
+    "delete": "delete /test -1",
+    "exists": "exists /test",
+    "help": "help",
+    "getChildren": "getChildren -i /test", 
+}
 
 fkCompleter = WordCompleter(keywords, ignore_case=True)
 
@@ -98,18 +108,28 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
     function = getattr(client, clientAPIMapping[cmd])
     sig = signature(function)
     params_count = len(sig.parameters)
-    # incorrect number of parameters
-    if params_count != len(args):
-        msg = f"{cmd} arguments:"
-        for param in sig.parameters.values():
-            # "watch" requires conversion - API uses a callback
-            # the CLI is a boolean switch if callback should be use or not
-            if param.name == "watch":
-                msg += f" watch:bool"
-            else:
-                msg += f" {param.name}:{param.annotation.__name__}"
-        click.echo(msg)
-        return client.session_status, client.session_id
+    # check incorrect number of parameters
+    if cmd in CMD: # check parsed arguments
+        # in this case, number of parsed arguments is always correct, so we need to check it type
+        # if an argument is missing, it will be a boolean value
+        for idx, param in enumerate(sig.parameters.values()):
+            if param.annotation != bool and isinstance(args[idx], bool) and param.name != "watch":
+                click.echo(f"Command Example: {INPUT_FORMAT[cmd]}")
+                return client.session_status, client.session_id
+            if isinstance(args[idx], bool): # convert boolean to string
+                args[idx] = str(args[idx])
+    else: 
+        if params_count != len(args):
+            msg = f"{cmd} arguments:"
+            for param in sig.parameters.values():
+                # "watch" requires conversion - API uses a callback
+                # the CLI is a boolean switch if callback should be use or not
+                if param.name == "watch":
+                    msg += f" watch:bool"
+                else:
+                    msg += f" {param.name}:{param.annotation.__name__}"
+            click.echo(msg)
+            return client.session_status, client.session_id
 
     # convert arguments
     converted_arguments = []
@@ -166,41 +186,35 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
 # find the position of the argument in the command (function call like), return -1 if the argument is not a flag
 def kwarg_pos(arg: str, kwargs_array: List[str]):
     for idx, kwarg in enumerate(kwargs_array):
-        if (type(kwarg) is set) and (arg in kwarg):
+        if isinstance(kwarg, set) and (arg in kwarg):
             return idx
     return -1
 
-# print the command format and flags to user
-def print_cmd_info(cmd: str):
-    args = ""
-    flags = ""
-    for arg in CMD[cmd]:
-        if type(arg) is str:
-            args += f"{arg} "
-        else:
-            flags += f"{arg} "
-    click.echo(f"Command: {args}| Flags: {flags}")
-
+PARSE_SUCCESS = 1
+PARSE_FAIL = 0
 
 # parse the arguments and return the parsed arguments
-# status code: 0 - success, 1 - not need to parse, 2 - error  
 def parse_args(cmd: str, args: List[str]):
     if cmd not in CMD:
-        return args, PARSE_SUCCESS
+        return PARSE_SUCCESS, args
     else:
-        parsed_args = [False] * len(CMD[cmd])
-        arg_idx = parse_args_idx = 0
-        while arg_idx < len(args):
-            idx = kwarg_pos(args[arg_idx], CMD[cmd])
-            if idx != -1:
-                parsed_args[idx] = True
-            else:
-                while isinstance(CMD[cmd][parse_args_idx], set): # skip the positions for flags
+        try:
+            assert len(args) <= len(CMD[cmd]) # check if the number of arguments is correct
+            parsed_args = [False] * len(CMD[cmd])
+            arg_idx = parse_args_idx = 0
+            while arg_idx < len(args):
+                idx = kwarg_pos(args[arg_idx], CMD[cmd])
+                if idx != -1:
+                    parsed_args[idx] = True
+                else:
+                    while isinstance(CMD[cmd][parse_args_idx], set): # skip the positions for flags
+                        parse_args_idx += 1
+                    parsed_args[parse_args_idx] = args[arg_idx]
                     parse_args_idx += 1
-                parsed_args[parse_args_idx] = args[arg_idx]
-                parse_args_idx += 1
-            arg_idx += 1
-    return parsed_args, PARSE_SUCCESS
+                arg_idx += 1
+        except Exception as e:
+            return PARSE_FAIL, None
+    return PARSE_SUCCESS, parsed_args
 
 
 @click.command()
@@ -256,9 +270,12 @@ def cli(config, port: int, verbose: str):
         elif cmd not in keywords:
             click.echo(f"Unknown command {text}")
         else:
-            print(cmd, cmds[1:])
-            parsed_args = parse_args(cmd, cmds[1:])
-            status, session_id = process_cmd(client, cmd, parsed_args)
+            status, parsed_args = parse_args(cmd, cmds[1:])
+            if status == PARSE_FAIL:
+                click.echo(f"Command Example: {INPUT_FORMAT[cmd]}")
+                status, session_id = client.session_status, client.session_id
+            else:
+                status, session_id = process_cmd(client, cmd, parsed_args)
         counter += 1
 
     print("Closing...")
