@@ -40,7 +40,8 @@ To install the local development environment with all necessary packages, please
 script. The script takes one optional argument `--venv` with a path to the Python and Node.js virtual
 environment, and the default path is `python-venv`. Use `source {venv-path}/bin/activate` to use it.
 
-The deployment with `serverless` framework is wrapped with a helper executable `fk.py`.
+The deployment with `serverless` framework is wrapped with a helper executable `fk.py`. To enable verbose debugging of functions, set the flag `verbose` in the config.
+### AWS
 Use the JSON config example in `config/user_config.json` to change the deployment name and parameters.
 Use this to deploy the service with all functions, storage, and queue services:
 
@@ -62,9 +63,41 @@ The existing deployment can be cleared by removing entire service before redeplo
 ```
 ./fk.py deploy service --provider aws --clean --config config/user_config.json
 ```
+### GCP
+Use the JSON config example in `config/user_config_gcp.json` to change the deployment name and parameters.
 
-To enable verbose debugging of functions, set the flag `verbose` in the config.
+Before running the script, please create a project and do the follwing, the steps 1-5 are in GCP console, the rest are in local terminal:
 
+1. enabling the datastore mode, deployment manager, pubsub, cloud functions and cloud run. To enable cloud functions and cloud run, you need to click the create button in console.
+2. By enabling cloud run service, a service account in the format of XXXXX-compute@developer.gserviceaccount.com will be automatically created.
+3. Go to Service Accounts under IAM & Admin and get a key pair of the XXXXX-compute@developer.gserviceaccount.com by clicking the three dots and selecting the manage key. Put the key file into the config folder, and execute the following cmd to store gcp credentials in your local environment.
+```
+ export GOOGLE_APPLICATION_CREDENTIALS="<ABSOLUTE_PATH_TO_KEY>"
+```
+4. fill the project details in `config/user_config_gcp.json`.
+5. Goto GCP IAM, grant XXXXX-compute@developer.gserviceaccount.com the role of owner and Storage Admin; grant GOOGLE ACCOUNT the Service Account Token Creator role.
+6. In terminal, login the gcloud cmd tool.
+```
+gcloud auth login <GOOGLE_ACCOUNT_EMAIL>
+```
+7. set current project
+```
+gcloud config set project <PROJECT_ID>
+```
+8. generate a temp token (valid for 1 hour), and copy the token into `gcp_config_auth.yml`.
+```
+gcloud auth print-access-token --impersonate-service-account=XXXXX-compute@developer.gserviceaccount.com
+```
+9. If the token expires, generate a new one and paste the token into `gcp_config_auth.yml` and delete the type-provider datastore-final. The new datastore-final type-provider will then be generated the next time you run deploy.
+```
+gcloud beta deployment-manager type-providers delete datastore-final
+```
+10. Uncomment the dependencies under gcp.
+11. Use this to deploy the service with all functions, storage, and queue services. If you ever come across an error about permissions, be sure to verify that step 1 has been executed correctly first.
+
+```
+./fk.py deploy service config/user_config_gcp_final.json --provider gcp --config config/user_config_gcp.json
+```
 ## Using CLI
 
 A CLI for FaaSKeeper is available in `bin/fkCli.py`. It allows to run interactive FaaSKeeper session,
