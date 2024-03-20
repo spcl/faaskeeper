@@ -270,8 +270,8 @@ def cli(config, port: int, verbose: str):
         elif cmd not in keywords:
             click.echo(f"Unknown command {text}")
         else:
-            status, parsed_args = parse_args(cmd, cmds[1:])
-            if status == PARSE_FAIL:
+            parse_status, parsed_args = parse_args(cmd, cmds[1:])
+            if parse_status == PARSE_FAIL:
                 click.echo(f"Command Example: {INPUT_FORMAT[cmd]}")
                 status, session_id = client.session_status, client.session_id
             else:
