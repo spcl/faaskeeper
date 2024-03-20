@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+import hashlib
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Dict, List, Set
 
@@ -8,10 +9,9 @@ import boto3
 
 from faaskeeper.stats import StorageStatistics
 from faaskeeper.version import SystemCounter
-from faaskeeper.watch import WatchType
 from functions.aws.config import Config
 from functions.aws.control.channel import Client
-from functions.aws.control.distributor_events import DistributorEventType, builder
+from functions.aws.control.distributor_events import DistributorEvent, DistributorEventType, builder
 from functions.aws.model.watches import Watches
 from functions.aws.stats import TimingStatistics
 
@@ -43,7 +43,7 @@ regions = ["us-east-1"]
 # verbose_output = False
 # FIXME: proper data structure
 region_clients = {}
-region_watches = {}
+region_watches: Dict[str, Watches] = {}
 epoch_counters: Dict[str, Set[str]] = {}
 for r in regions:
     region_clients[r] = boto3.client("lambda", region_name=r)
@@ -56,28 +56,33 @@ def get_object(obj: dict):
     return next(iter(obj.values()))
 
 
-def launch_watcher(region: str, json_in: dict):
+def launch_watcher(operation: DistributorEvent, region: str, json_in: dict):
     """
     (1) Submit watcher
     (2) Wait for completion
     (3) Remove ephemeral counter.
     """
-    # FIXME process result
-    region_clients[region].invoke(
+    is_delivered = region_clients[region].invoke(
         FunctionName=f"{config.deployment_name}-watch",
         InvocationType="RequestResponse",
         Payload=json.dumps(json_in).encode(),
     )
 
-
-# def query_watch_id(region: str, node_path: str):
-#    return region_watches[region].get_watch_counters(node_path)
+    if is_delivered:
+        hashed_path = hashlib.md5(json_in["path"].encode()).hexdigest()
+        timestamp = json_in["timestamp"]
+        watch_type = json_in["type"]
+        
+        # pop the pending watch: update epoch counters for the node and parent in user storage.
+        epoch_counters[r].remove(f"{hashed_path}_{watch_type}_{timestamp}")
+        operation.update_epoch_counters(config.user_storage, epoch_counters[r])
+        return True
+    return False
 
 timing_stats = TimingStatistics.instance()
 
 
 def handler(event: dict, context):
-
     events = event["Records"]
     logging.info(f"Begin processing {len(events)} events")
 
@@ -150,19 +155,18 @@ def handler(event: dict, context):
                 if config.benchmarking:
                     begin_watch = time.time()
                 # start watch delivery
-                for r in regions:
-                    # if event_type == DistributorEventType.SET_DATA:
-                    #    watches_submitters.append(
-                    #        executor.submit(launch_watcher, r, watches)
-                    #    )
-                    # FIXME: other watchers
-                    # FIXME: reenable submission
-                    # Query watches from DynaamoDB to decide later
-                    # if they should even be scheduled.
-                    region_watches[r].query_watches(
-                        operation.node.path, [WatchType.GET_DATA]
-                    )
+                for r in regions: # deliver watch concurrently
+                    for watch in operation.generate_watches_event(region_watches[r]):
+                        watch_dict = {
+                            "event": watch.watch_event_type,
+                            "type": watch.watch_type,
+                            "path": watch.node_path,
+                            "timestamp": watch.mFxidSys,
+                        }
 
+                        watches_submitters.append(
+                            executor.submit(launch_watcher, operation, r, watch_dict) # watch: {DistributorEvent, watchType, timestamp, path}
+                        )
                 if config.benchmarking:
                     end_watch = time.time()
                     timing_stats.add_result("watch_query", end_watch - begin_watch)

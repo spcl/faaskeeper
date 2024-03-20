@@ -5,8 +5,12 @@ from boto3.dynamodb.types import TypeDeserializer
 from faaskeeper.watch import WatchType
 from functions.aws.control.dynamo import DynamoStorage as DynamoDriver
 
+from collections import namedtuple
 
 class Watches:
+        
+    Watch_Event = namedtuple("Watch_Event", ["watch_event_type","watch_type", "node_path", "mFxidSys"])
+
     def __init__(self, storage_name: str, region: str):
         self._storage = DynamoDriver(f"{storage_name}-watch", "path")
         self._region = region
@@ -23,16 +27,18 @@ class Watches:
             ret = self._storage.read(node_path)
 
             data = []
-            if "Attributes" in ret:
+            if "Item" in ret:
                 for c in counters:
-                    data.append(
-                        (
-                            c,
-                            self._type_deserializer.deserialize(
-                                ret["Attributes"][self._counters.get(c)]
-                            ),
+                    if self._counters.get(c) in ret["Item"]:
+                        data.append(
+                            (
+                                c,
+                                node_path,
+                                self._type_deserializer.deserialize(
+                                    ret["Item"][self._counters.get(c)]
+                                ),
+                            )
                         )
-                    )
             return data
         except self._storage.errorSupplier.ResourceNotFoundException:
             return []
