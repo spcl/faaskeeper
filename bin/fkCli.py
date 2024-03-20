@@ -116,8 +116,6 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
             if param.annotation != bool and isinstance(args[idx], bool) and param.name != "watch":
                 click.echo(f"Command Example: {INPUT_FORMAT[cmd]}")
                 return client.session_status, client.session_id
-            if isinstance(args[idx], bool): # convert boolean to string
-                args[idx] = str(args[idx])
     else: 
         if params_count != len(args):
             msg = f"{cmd} arguments:"
@@ -137,7 +135,7 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
         # "watch" requires conversion - API uses a callback
         # the CLI is a boolean switch if callback should be use or not
         if param.name == "watch":
-            if args[idx].lower() == "true":
+            if args[idx]:
                 converted_arguments.append(watch_callback)
             else:
                 converted_arguments.append(None)
@@ -145,8 +143,6 @@ def process_cmd(client: FaaSKeeperClient, cmd: str, args: List[str]):
 
         if bytes == param.annotation:
             converted_arguments.append(args[idx].encode())
-        elif bool == param.annotation:
-            converted_arguments.append(bool(args[idx]))
         else:
             converted_arguments.append(args[idx])
     try:
