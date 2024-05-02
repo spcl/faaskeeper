@@ -11,6 +11,21 @@ is planned in the future.
 
 To use a deployed FaaSKeeper instance, check our Python client library: [spcl/faaskeeper-python](https://github.com/spcl/faaskeeper-python).
 
+### Paper
+
+When using FaaSKeeper, please cite our upcoming HPDC'24 paper. You can find more details about research work [in this paper summary](https://mcopik.github.io/projects/faaskeeper/)
+and [paper preprint on arXiv](https://arxiv.org/abs/2203.14859).
+
+```
+@inproceedings{copik2024faaskeeper,
+  author = {Copik, Marcin and Calotoiu, Alexandru and Zhou, Pengyu and Taranov, Konstantin and Hoefler, Torsten},
+  title = {FaaSKeeper: Learning from Building Serverless Services with ZooKeeper as an Example},
+  year = {2024},
+  series = {HPDC '24},
+  booktitle = {Proceedings of the 33rd International Symposium on High-Performance Parallel and Distributed Computing}
+}
+```
+
 ## Dependencies
 
 * Python >= 3.7
