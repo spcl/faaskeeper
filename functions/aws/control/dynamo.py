@@ -11,6 +11,7 @@ from .storage import Storage
 
 class DynamoStorage(Storage):
     def __init__(self, table_name: str, key_name: str):
+        # key_name corresponds to KeySchema in yaml
         super().__init__(table_name)
         self._dynamodb = boto3.client("dynamodb")
         self._type_serializer = TypeSerializer()

@@ -108,7 +108,7 @@ def handler(event: dict, context):
                 #       write_event["data"]["B"]
                 #    )
 
-            elif "body" in record:
+            elif "body" in record: # received via SQS
                 write_event = json.loads(record["body"])
                 event_type = DistributorEventType(int(write_event["type"]["N"]))
                 if "data" in record["messageAttributes"]:

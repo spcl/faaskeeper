@@ -1,0 +1,142 @@
+service: faaskeeper-subs
+projectDir: ../
+# !inlcude and exclude
+provider:
+  name: google
+  stage: dev
+  runtime: python38
+  region: ${env:FK_DEPLOYMENT_REGION}
+  project: ${env:FK_GCP_PROJECT_ID}
+  # the path to the credentials file needs to be absolute
+  credentials: ${env:FK_GCP_CREDENTIALS}
+  environment:
+    CLOUD_FUNCTION_MIN_INSTANCE: 0
+    CLOUD_FUNCTION_MAX_INSTANCE: 10
+
+plugins:
+  - serverless-google-cloudfunctions
+package:
+  patterns:
+    - '!**'
+    - 'main.py'
+    - 'requirements.txt'
+
+# ! NEED ENV VARIABLEs
+functions: # make changes according to the youtube tutorial
+  dummy2: # dummy first generation cloud function
+    handler: dummy_http_function
+    events:
+      - http: path
+
+resources:
+  resources:
+      # cloud function gen2
+    - name: watch-function-v2
+      type: gcp-types/cloudfunctions-v2beta:projects.locations.functions
+      properties:
+        parent: projects/${env:FK_GCP_PROJECT_ID}/locations/${env:FK_DEPLOYMENT_REGION}
+        function: faaskeeper-${env:FK_DEPLOYMENT_NAME}-watch
+        buildConfig:
+          source:
+            storageSource:
+              bucket: sls-gcp-${self:provider.stage}-${env:FK_BUCKET_NAME}
+              object: ${self:service}-watch.zip
+          entryPoint: handler
+          runtime: python38
+        serviceConfig:
+          minInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MIN_INSTANCE}
+          maxInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MAX_INSTANCE}
+          environmentVariables:
+            PROJECT_ID: ${self:provider.project}
+            CLOUD_STORAGE_BUCKET: sls-gcp-${self:provider.stage}-${env:FK_BUCKET_NAME}
+            DB_NAME: ${env:FK_DB_NAME}
+            SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
+            DEPLOYMENT_NAME: ${env:FK_DEPLOYMENT_NAME}
+            GCP_REGION: ${env:FK_DEPLOYMENT_REGION}
+            CLIENT_CHANNEL: ${env:FK_CLIENT_CHANNEL}
+            DISTRIBUTOR_QUEUE: ${env:FK_WORKER_QUEUE}
+            USER_STORAGE: ${env:FK_USER_STORAGE}
+            VERBOSE: ${env:FK_VERBOSE} # need to be string type in config file
+            DISTRIBUTOR_QUEUE_NAME: distributor-queue-topic
+            BENCHMARKING: ${env:FK_FUNCTION_BENCHMARKING}
+    - name: writer-function-v2
+      type: gcp-types/cloudfunctions-v2beta:projects.locations.functions
+      properties:
+        parent: projects/${env:FK_GCP_PROJECT_ID}/locations/${env:FK_DEPLOYMENT_REGION}
+        function: faaskeeper-${env:FK_DEPLOYMENT_NAME}-writer
+        buildConfig:
+          source:
+            storageSource:
+              bucket: sls-gcp-${self:provider.stage}-${env:FK_BUCKET_NAME}
+              object: ${self:service}-writer.zip
+          entryPoint: handler
+          runtime: python38
+        serviceConfig:
+          minInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MIN_INSTANCE}
+          maxInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MAX_INSTANCE}
+          environmentVariables:
+            PROJECT_ID: ${self:provider.project}
+            CLOUD_STORAGE_BUCKET: sls-gcp-${self:provider.stage}-${env:FK_BUCKET_NAME}
+            DB_NAME: ${env:FK_DB_NAME}
+            SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
+            DEPLOYMENT_NAME: ${env:FK_DEPLOYMENT_NAME}
+            GCP_REGION: ${env:FK_DEPLOYMENT_REGION}
+            CLIENT_CHANNEL: ${env:FK_CLIENT_CHANNEL}
+            DISTRIBUTOR_QUEUE: ${env:FK_WORKER_QUEUE}
+            USER_STORAGE: ${env:FK_USER_STORAGE}
+            VERBOSE: ${env:FK_VERBOSE} # need to be string type in config file
+            DISTRIBUTOR_QUEUE_NAME: distributor-queue-topic
+            BENCHMARKING: ${env:FK_FUNCTION_BENCHMARKING}
+    - name: distributor-function-v2
+      type: gcp-types/cloudfunctions-v2beta:projects.locations.functions
+      properties:
+        parent: projects/${env:FK_GCP_PROJECT_ID}/locations/${env:FK_DEPLOYMENT_REGION}
+        function: faaskeeper-${env:FK_DEPLOYMENT_NAME}-distributor
+        buildConfig:
+          source:
+            storageSource:
+              bucket: sls-gcp-${self:provider.stage}-${env:FK_BUCKET_NAME}
+              object: ${self:service}-distributor.zip
+          entryPoint: handler
+          runtime: python38
+        serviceConfig:
+          minInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MIN_INSTANCE}
+          maxInstanceCount: ${self:provider.environment.CLOUD_FUNCTION_MAX_INSTANCE}
+          environmentVariables:
+            PROJECT_ID: ${self:provider.project}
+            CLOUD_STORAGE_BUCKET: sls-gcp-${self:provider.stage}-${env:FK_BUCKET_NAME}
+            DB_NAME: ${env:FK_DB_NAME}
+            SYSTEM_STORAGE: ${env:FK_SYSTEM_STORAGE}
+            DEPLOYMENT_NAME: ${env:FK_DEPLOYMENT_NAME}
+            GCP_REGION: ${env:FK_DEPLOYMENT_REGION}
+            CLIENT_CHANNEL: ${env:FK_CLIENT_CHANNEL}
+            DISTRIBUTOR_QUEUE: ${env:FK_WORKER_QUEUE}
+            USER_STORAGE: ${env:FK_USER_STORAGE}
+            VERBOSE: ${env:FK_VERBOSE} # need to be string type in config file
+            DISTRIBUTOR_QUEUE_NAME: distributor-queue-topic
+            BENCHMARKING: ${env:FK_FUNCTION_BENCHMARKING}
+
+    # subscription
+    - name: writer-subs
+      type: gcp-types/pubsub-v1:projects.subscriptions
+      properties:
+        subscription: writer-queue-subs
+        topic: projects/${env:FK_GCP_PROJECT_ID}/topics/writer-queue-topic # name in gcp.yml
+        enableMessageOrdering: True
+        ackDeadlineSeconds: 10
+        pushConfig:
+          pushEndpoint: https://${env:FK_DEPLOYMENT_REGION}-${env:FK_GCP_PROJECT_ID}.cloudfunctions.net/faaskeeper-${env:FK_DEPLOYMENT_NAME}-writer
+          oidcToken:
+            serviceAccountEmail: ${env:FK_COMPUTE_SERVICE_ACCOUNT}
+
+    - name: distributor-subs
+      type: gcp-types/pubsub-v1:projects.subscriptions
+      properties:
+        subscription: distributor-queue-topic
+        topic: projects/${env:FK_GCP_PROJECT_ID}/topics/distributor-queue-topic # using ref create dependency
+        enableMessageOrdering: True
+        ackDeadlineSeconds: 10
+        pushConfig:
+          pushEndpoint: https://${env:FK_DEPLOYMENT_REGION}-${env:FK_GCP_PROJECT_ID}.cloudfunctions.net/faaskeeper-${env:FK_DEPLOYMENT_NAME}-distributor
+          oidcToken:
+            serviceAccountEmail: ${env:FK_COMPUTE_SERVICE_ACCOUNT}

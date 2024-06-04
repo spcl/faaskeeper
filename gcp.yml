@@ -1,0 +1,59 @@
+service: faaskeeper
+projectDir: ../
+provider:
+  name: google
+  stage: dev
+  runtime: python38
+  region: ${env:FK_DEPLOYMENT_REGION}
+  project: ${env:FK_GCP_PROJECT_ID}
+  # The GCF credentials can be a little tricky to set up. Luckily we've documented this for you here:
+  # https://serverless.com/framework/docs/providers/google/guide/credentials/
+  #
+  # the path to the credentials file needs to be absolute
+  credentials: ${env:FK_GCP_CREDENTIALS}
+
+plugins:
+  - serverless-google-cloudfunctions
+package:
+  patterns:
+    - '!**'
+    - 'main.py'
+    - 'requirements.txt'
+
+
+functions: # make changes according to the youtube tutorial
+  # # watch
+  dummy: # dummy first generation cloud function
+    handler: dummy_http_function
+    events:
+      - http: path
+
+resources:
+  resources:
+    # cloud storage
+    # double check if the name is globally unique on GCP
+    - name: sls-gcp-${self:provider.stage}-${env:FK_BUCKET_NAME}
+      type: storage.v1.bucket
+      properties:
+        location: us-central1
+
+    #datastore, only need to use this part for the very first time.
+    - name: testdatastore1
+      type: ${self:provider.project}/datastore-final:projects.databases
+      properties:
+        parent: projects/${self:provider.project}
+        databaseId: ${env:FK_DB_NAME}
+        locationId: nam5
+        type: DATASTORE_MODE
+    
+    # topic
+    - name: writer-topic
+      type: pubsub.v1.topic
+      properties:
+        topic: writer-queue-topic
+
+    - name: distributor-topic
+      type: pubsub.v1.topic
+      properties:
+        topic: distributor-queue-topic
+    # since metadata dependsOn does not work, for now I will put them all into a separate yaml file
