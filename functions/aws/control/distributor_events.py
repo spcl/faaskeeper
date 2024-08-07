@@ -233,6 +233,8 @@ class DistributorCreateNode(DistributorEvent):
                     }
 
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
+        self.node.flag = system_node.node.flag
+        
         user_storage.write(self.node)
         # FIXME: update parent epoch and pxid
         # self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
