@@ -244,6 +244,10 @@ class DynamoStorage(Storage):
             update_expr = f"{update_expr} cFxidSys = :createdStamp,"
             update_values[":createdStamp"] = node.created.system.version
 
+            # Add Node type
+            update_expr = f"{update_expr} nodeType = :flag,"
+            update_values[":flag"] = self._type_serializer.serialize(node.flag)
+
             # Initialize the list of pending updates
             update_expr = f"{update_expr} pendingUpdates = :pendingUpdatesList,"
             update_values[":pendingUpdatesList"] = self._type_serializer.serialize(  # type: ignore
