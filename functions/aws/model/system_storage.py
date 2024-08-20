@@ -213,6 +213,12 @@ class DynamoStorage(Storage):
                     # EpochCounter.from_provider_schema(data["mFxidEpoch"]),
                 )
                 n.children = self._type_deserializer.deserialize(data["children"])
+
+            if "nodeType" in data:
+                n.flag = self._type_deserializer.deserialize(
+                data["nodeType"]
+            )
+
             return (True, n)
         except self._state_storage.errorSupplier.ConditionalCheckFailedException:
             return (False, None)
@@ -243,6 +249,10 @@ class DynamoStorage(Storage):
         if faaskeeper.node.NodeDataType.CREATED in updates:
             update_expr = f"{update_expr} cFxidSys = :createdStamp,"
             update_values[":createdStamp"] = node.created.system.version
+
+            # Add Node type
+            update_expr = f"{update_expr} nodeType = :flag,"
+            update_values[":flag"] = self._type_serializer.serialize(node.flag)
 
             # Initialize the list of pending updates
             update_expr = f"{update_expr} pendingUpdates = :pendingUpdatesList,"
@@ -419,7 +429,7 @@ class DynamoStorage(Storage):
         update_event_id: Optional[str] = None,
     ) -> dict:
 
-        update_expr = "REMOVE #created, #modified, #children, #timelock"
+        update_expr = "REMOVE #created, #modified, #children, #timelock, #nodeType"
         update_values = {":mytimelock": {"N": str(timestamp)}}
         if update_event_id is not None:
 
@@ -444,6 +454,7 @@ class DynamoStorage(Storage):
                 "#modified": "mFxidSys",
                 "#children": "children",
                 "#timelock": "timelock",
+                "#nodeType": "nodeType"
             },
             "ExpressionAttributeValues": update_values,
         }
@@ -507,6 +518,11 @@ class DynamoStorage(Storage):
         if "children" in data:
             dynamo_node.node.children = self._type_deserializer.deserialize(
                 data["children"]
+            )
+
+        if "nodeType" in data:
+            dynamo_node.node.flag = self._type_deserializer.deserialize(
+                data["nodeType"]
             )
 
         return dynamo_node

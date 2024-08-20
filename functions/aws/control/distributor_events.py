@@ -116,6 +116,7 @@ class DistributorCreateNode(DistributorEvent):
         data = {
             "type": serializer.serialize(self.type.value),
             "session_id": serializer.serialize(self.session_id),
+            "flag": serializer.serialize(self.node.flag),
             "event_id": serializer.serialize(self.event_id),
             "lock_timestamp": serializer.serialize(self.lock_timestamp),
             "parent_lock_timestamp": serializer.serialize(self._parent_lock_timestamp),
@@ -136,6 +137,7 @@ class DistributorCreateNode(DistributorEvent):
 
         deserializer = DistributorCreateNode._type_deserializer
         node = Node(deserializer.deserialize(event_data["path"]))
+        
         # counter = SystemCounter.from_provider_schema(event_data["counter"])
         # node.created = Version(counter, None)
         # node.modified = Version(counter, None)
@@ -143,6 +145,7 @@ class DistributorCreateNode(DistributorEvent):
         # node.data = base64.b64decode(deserializer.deserialize(event_data["data"]))
         # node.data = base64.b64decode(event_data["data"]["B"])
         node.data_b64 = event_data["data"]["B"]
+        node.flag = deserializer.deserialize(event_data["flag"])
 
         parent_node = Node(deserializer.deserialize(event_data["parent_path"]))
         parent_node.children = deserializer.deserialize(event_data["parent_children"])
@@ -233,6 +236,8 @@ class DistributorCreateNode(DistributorEvent):
                     }
 
         self.node.modified.epoch = EpochCounter.from_raw_data(epoch_counters)
+        self.node.flag = system_node.node.flag
+        
         user_storage.write(self.node)
         # FIXME: update parent epoch and pxid
         # self.parent.modified.epoch = EpochCounter.from_raw_data(epoch_counters)

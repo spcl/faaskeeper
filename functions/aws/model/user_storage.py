@@ -57,6 +57,7 @@ class DynamoStorage(Storage):
             schema = {
                 **schema,
                 "cFxidSys": node.created.system.version,
+                "nodeType": self._type_serializer.serialize(node.flag)
             }
         if NodeDataType.MODIFIED in updates:
             schema = {

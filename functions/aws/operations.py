@@ -109,6 +109,7 @@ class CreateNodeExecutor(Executor):
         # store the created and the modified version counter
         self._node = Node(self.op.path)
         self._node.children = []
+        self._node.flag = self.op._flags
         # we propagate data to another queue, we should use the already
         # base64-encoded data
         # FIXME: keep the information if base64 encoding is actually applied?
