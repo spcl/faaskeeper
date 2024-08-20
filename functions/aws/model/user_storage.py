@@ -63,6 +63,8 @@ class DynamoStorage(Storage):
             schema = {
                 **schema,
                 "mFxidSys": node.modified.system.version,
+                "nodeType": self._type_serializer.serialize(node.flag)
+
             }
             if node.modified.epoch:
                 assert node.modified.epoch.version is not None

@@ -121,7 +121,7 @@ class ClientChannelSQS(ClientChannel):
             queue = self._get_queue(user)
             self._sqs.send_message(
                 QueueUrl=queue,
-                MessageBody=json.dumps({**ret, "event": user.timestamp}),
+                MessageBody=json.dumps({**ret, "event": user.timestamp, "session_id": user.session_id}),
             )
         except ClientError as error:
             logging.error(f"Notification of client {user} failed!")
