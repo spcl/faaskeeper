@@ -10,11 +10,18 @@ toml==0.10.2
 flake8-black==0.1.2
 mypy==0.761; python_version < '3.9'
 mypy==0.790; python_version >= '3.9'
-mypy-boto3==1.13.24.2
-boto3-stubs[lambda]
-boto3-stubs[dynamodb]
 prompt_toolkit
 isort
 pytest
 
 nodeenv
+# aws
+mypy-boto3==1.13.24.2
+boto3-stubs[lambda]
+boto3-stubs[dynamodb]
+# gcp
+# google-cloud-datastore==2.16.1 # KV store
+# google-cloud-pubsub==2.18.0 # MQ
+# functions-framework==3.4.0 # cloud function
+# google-cloud-storage==2.10.0 # object storage
+# git+https://github.com/mcopik/faaskeeper-python.git@main
